@@ -55,10 +55,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { to: '/vendor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { to: '/vendor/shipments', label: 'Incoming Shipments', icon: Truck },
         { to: '/vendor/scanner', label: 'Receipt Scanner', icon: ScanLine, highlight: true },
-        { to: '/vendor/discrepancies', label: 'Exceptions & Damaged', icon: AlertTriangle, badge: '1' },
-        { to: '/vendor/inventory', label: 'Hub Stock', icon: Layers },
+        { to: '/vendor/discrepancies', label: 'Exceptions & Damaged', icon: AlertTriangle, badge: '4' },
         { to: '/vendor/shipments/outgoing', label: 'Outgoing Deliveries', icon: Send },
-        { to: '/vendor/returns', label: 'Quarantine & Returns', icon: RotateCcw },
         { to: '/vendor/settings', label: 'Settings', icon: Settings }
       ];
     } else {

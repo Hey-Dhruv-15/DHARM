@@ -167,6 +167,8 @@ export interface ScanRecord {
   notes?: string;
 }
 
+export type CustomerResolutionChoice = 'Replace Product' | 'Refund Amount';
+
 export interface ReturnCase {
   id: string;
   returnNumber: string;
@@ -176,13 +178,22 @@ export interface ReturnCase {
   customerName: string;
   productId: string;
   productName: string;
+  sku?: string;
   quantity: number;
   reason: 'Damaged in Transit' | 'Incorrect Item Received' | 'Defective Unit' | 'Customer Cancellation';
-  status: 'Requested' | 'Pickup Scheduled' | 'Received at Hub' | 'Inspected' | 'Quarantined' | 'Replacement Dispatched' | 'Closed';
+  status: 'Requested' | 'Pickup Scheduled' | 'Received at Hub' | 'Inspected' | 'Quarantined' | 'Replacement Dispatched' | 'Refund Processed' | 'Closed';
   evidencePhotos: string[];
   inspectionNotes?: string;
   quarantineLocation?: string;
   replacementShipmentId?: string;
+  customerChoice?: CustomerResolutionChoice;
+  refundAmount?: number;
+  refundStatus?: 'Pending' | 'Processed';
+  refundReference?: string;
+  vendorVerified?: boolean;
+  vendorVerifiedBy?: string;
+  vendorVerifiedAt?: string;
+  problemDiagnosis?: string;
   requestedAt: string;
   updatedAt: string;
 }

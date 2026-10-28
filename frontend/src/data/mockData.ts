@@ -445,7 +445,55 @@ export const INITIAL_CONTAINERS: Container[] = [
     capacityKg: 100,
     currentWeightKg: 0,
     itemCount: 0,
-    location: 'Owner Depot Storage'
+    location: 'Vendor Hub Storage Rack C-02'
+  },
+  {
+    id: 'cnt-05',
+    containerNumber: 'CNT-CRYO-09',
+    type: 'Cold-Chain Bin',
+    sealNumber: 'SEAL-CRY-44019',
+    status: 'In Transit',
+    capacityKg: 80,
+    currentWeightKg: 45.2,
+    itemCount: 6,
+    assignedShipmentId: 'shp-2026-004',
+    location: 'Express Air Cargo Flight DH-302'
+  },
+  {
+    id: 'cnt-06',
+    containerNumber: 'CNT-DOCK-88',
+    type: 'Cold-Chain Bin',
+    sealNumber: 'SEAL-DCK-77112',
+    status: 'Assigned',
+    capacityKg: 180,
+    currentWeightKg: 95.0,
+    itemCount: 18,
+    assignedShipmentId: 'shp-2026-005',
+    location: 'Midwest Sorting Hub 4 - Dock Bay 3'
+  },
+  {
+    id: 'cnt-07',
+    containerNumber: 'CNT-PAL-204',
+    type: 'RFID Pallet',
+    sealNumber: 'SEAL-RFID-99441',
+    status: 'In Transit',
+    capacityKg: 600,
+    currentWeightKg: 310.5,
+    itemCount: 32,
+    assignedShipmentId: 'shp-2026-006',
+    location: 'Highway Corridor 80 -> Midwest Hub 4'
+  },
+  {
+    id: 'cnt-08',
+    containerNumber: 'CNT-OUT-14',
+    type: 'Security Crate',
+    sealNumber: 'SEAL-SEC-22019',
+    status: 'Assigned',
+    capacityKg: 150,
+    currentWeightKg: 72.0,
+    itemCount: 10,
+    assignedShipmentId: 'shp-2026-007',
+    location: 'Midwest Hub 4 - Outgoing Bay 1'
   }
 ];
 
@@ -620,7 +668,7 @@ export const INITIAL_SHIPMENTS: Shipment[] = [
         status: 'Dispatched',
         location: 'Apex Central Depot',
         performedBy: 'Dhruva (Owner)',
-        notes: 'Dispatched.'
+        notes: 'Dispatched via Express Logistics.'
       },
       {
         id: 'ev-302',
@@ -639,6 +687,228 @@ export const INITIAL_SHIPMENTS: Shipment[] = [
         notes: 'Handover verified and signed off by Anusha S.'
       }
     ]
+  },
+  {
+    id: 'shp-2026-004',
+    trackingNumber: 'TRK-DHM-662190',
+    ownerId: 'user-owner',
+    ownerName: 'Dhruva (Owner)',
+    vendorId: 'user-vendor',
+    vendorName: 'Sinu Gunshetty (Trans-Express)',
+    customerId: 'user-cust-02',
+    customerName: 'Max Super Specialty Hospital',
+    origin: 'Apex Global Logistics Center',
+    destination: 'Midwest Sorting & Cross-Dock Hub 4',
+    status: 'In Transit',
+    manifestHash: 'sha256-ff71280ab90184cba6109923184af28109',
+    dispatchDate: '2026-10-28T06:00:00Z',
+    estimatedDelivery: '2026-10-28T22:30:00Z',
+    containerIds: ['cnt-05'],
+    items: [
+      {
+        productId: 'prod-001',
+        productName: 'Cryo-Shield Specimen Transporter',
+        sku: 'MED-CRYO-901',
+        barcode: 'BC-901-CRYO-8821',
+        containerId: 'cnt-05',
+        containerNumber: 'CNT-CRYO-09',
+        expectedQuantity: 6,
+        verifiedQuantity: 0,
+        scannedQuantity: 0,
+        status: 'Pending'
+      }
+    ],
+    events: [
+      {
+        id: 'ev-401',
+        timestamp: '2026-10-28T06:00:00Z',
+        status: 'Dispatched',
+        location: 'Apex Global Logistics Center Gate 1',
+        performedBy: 'Dhruva (Owner)',
+        notes: 'Express cryogenic transport flight DH-302 departed.'
+      }
+    ],
+    notes: 'High-priority clinical trial dry ice container.'
+  },
+  {
+    id: 'shp-2026-005',
+    trackingNumber: 'TRK-DHM-441209',
+    ownerId: 'user-owner',
+    ownerName: 'Dhruva (Owner)',
+    vendorId: 'user-vendor',
+    vendorName: 'Sinu Gunshetty (Trans-Express)',
+    customerId: 'user-cust-03',
+    customerName: 'Fortis Clinical Research Hub',
+    origin: 'Apex Central Depot (Hub Alpha)',
+    destination: 'Midwest Sorting & Cross-Dock Hub 4',
+    status: 'Received',
+    manifestHash: 'sha256-3199af8402bc417ea991048bc827104b901',
+    dispatchDate: '2026-10-27T18:00:00Z',
+    estimatedDelivery: '2026-10-28T14:00:00Z',
+    containerIds: ['cnt-06'],
+    items: [
+      {
+        productId: 'prod-001',
+        productName: 'Cryo-Shield Specimen Transporter',
+        sku: 'MED-CRYO-901',
+        barcode: 'BC-901-CRYO-8821',
+        containerId: 'cnt-06',
+        containerNumber: 'CNT-DOCK-88',
+        expectedQuantity: 6,
+        verifiedQuantity: 0,
+        scannedQuantity: 0,
+        status: 'Pending'
+      },
+      {
+        productId: 'prod-002',
+        productName: 'OptiTrace Diagnostic Sensor Array',
+        sku: 'BIO-DIAG-440',
+        barcode: 'BC-440-SENS-7719',
+        containerId: 'cnt-06',
+        containerNumber: 'CNT-DOCK-88',
+        expectedQuantity: 12,
+        verifiedQuantity: 0,
+        scannedQuantity: 0,
+        status: 'Pending'
+      }
+    ],
+    events: [
+      {
+        id: 'ev-501',
+        timestamp: '2026-10-28T13:45:00Z',
+        status: 'Received',
+        location: 'Midwest Sorting Hub 4 - Dock Bay 3',
+        performedBy: 'Sinu Gunshetty (Vendor)',
+        notes: 'Docked at Bay 3. Ready for QR/Barcode Verification Scanning.'
+      }
+    ],
+    notes: 'Docked at sorting bay. Awaiting verification scanning.'
+  },
+  {
+    id: 'shp-2026-006',
+    trackingNumber: 'TRK-DHM-551020',
+    ownerId: 'user-owner',
+    ownerName: 'Dhruva (Owner)',
+    vendorId: 'user-vendor',
+    vendorName: 'Sinu Gunshetty (Trans-Express)',
+    customerId: 'user-cust',
+    customerName: 'Anusha S (BioMed)',
+    origin: 'Apex Central Depot',
+    destination: 'Midwest Sorting & Cross-Dock Hub 4',
+    status: 'In Transit',
+    manifestHash: 'sha256-8819ab01994efa78401bc9942a178bc9001',
+    dispatchDate: '2026-10-28T09:30:00Z',
+    estimatedDelivery: '2026-10-29T11:00:00Z',
+    containerIds: ['cnt-07'],
+    items: [
+      {
+        productId: 'prod-004',
+        productName: 'NanoPore Sterile Filtration Cartridge',
+        sku: 'MED-STER-551',
+        barcode: 'BC-551-FILT-6652',
+        containerId: 'cnt-07',
+        containerNumber: 'CNT-PAL-204',
+        expectedQuantity: 32,
+        verifiedQuantity: 0,
+        scannedQuantity: 0,
+        status: 'Pending'
+      }
+    ],
+    events: [
+      {
+        id: 'ev-601',
+        timestamp: '2026-10-28T09:30:00Z',
+        status: 'Dispatched',
+        location: 'Apex Central Depot',
+        performedBy: 'Dhruva (Owner)',
+        notes: 'Freight Carrier Semi-Trailer dispatched on I-80 corridor.'
+      }
+    ],
+    notes: 'Heavy bulk palletized filter stock.'
+  },
+  {
+    id: 'shp-2026-007',
+    trackingNumber: 'TRK-DHM-338290',
+    ownerId: 'user-owner',
+    ownerName: 'Dhruva (Owner)',
+    vendorId: 'user-vendor',
+    vendorName: 'Sinu Gunshetty (Trans-Express)',
+    customerId: 'user-cust-03',
+    customerName: 'Fortis Clinical Research Hub',
+    origin: 'Midwest Sorting & Cross-Dock Hub 4',
+    destination: 'Fortis Research Complex Gate 4',
+    status: 'Ready for Dispatch',
+    manifestHash: 'sha256-99014efa10992748bc81900127fa9180',
+    dispatchDate: '2026-10-28T19:00:00Z',
+    estimatedDelivery: '2026-10-29T09:00:00Z',
+    containerIds: ['cnt-08'],
+    items: [
+      {
+        productId: 'prod-002',
+        productName: 'OptiTrace Diagnostic Sensor Array',
+        sku: 'BIO-DIAG-440',
+        barcode: 'BC-440-SENS-7719',
+        containerId: 'cnt-08',
+        containerNumber: 'CNT-OUT-14',
+        expectedQuantity: 10,
+        verifiedQuantity: 10,
+        scannedQuantity: 10,
+        status: 'Verified'
+      }
+    ],
+    events: [
+      {
+        id: 'ev-701',
+        timestamp: '2026-10-28T16:00:00Z',
+        status: 'Ready for Dispatch',
+        location: 'Midwest Hub 4 - Outgoing Bay 1',
+        performedBy: 'Sinu Gunshetty (Vendor)',
+        notes: 'Outbound packaging and custody manifest signed.'
+      }
+    ],
+    notes: 'Courier pickup scheduled for 19:00.'
+  },
+  {
+    id: 'shp-2026-008',
+    trackingNumber: 'TRK-DHM-119940',
+    ownerId: 'user-owner',
+    ownerName: 'Dhruva (Owner)',
+    vendorId: 'user-vendor',
+    vendorName: 'Sinu Gunshetty (Trans-Express)',
+    customerId: 'user-cust-02',
+    customerName: 'Max Super Specialty Hospital',
+    origin: 'Midwest Sorting & Cross-Dock Hub 4',
+    destination: 'Max Hospital Oncology Pharmacy',
+    status: 'Dispatched',
+    manifestHash: 'sha256-440192837bc991048aef0192847ba918',
+    dispatchDate: '2026-10-28T11:00:00Z',
+    estimatedDelivery: '2026-10-29T14:00:00Z',
+    containerIds: [],
+    items: [
+      {
+        productId: 'prod-003',
+        productName: 'BioReagent Lyophilized Stabilizer',
+        sku: 'PHRM-COLD-102',
+        barcode: 'BC-102-BIO-3320',
+        containerId: 'cnt-02',
+        containerNumber: 'CNT-SEC-409',
+        expectedQuantity: 15,
+        verifiedQuantity: 15,
+        scannedQuantity: 15,
+        status: 'Verified'
+      }
+    ],
+    events: [
+      {
+        id: 'ev-801',
+        timestamp: '2026-10-28T11:00:00Z',
+        status: 'Dispatched',
+        location: 'Midwest Hub 4 Outbound Bay',
+        performedBy: 'Sinu Gunshetty (Vendor)',
+        notes: 'Handed over to BlueDart Dedicated Courier van.'
+      }
+    ],
+    notes: 'Active temperature logger attached.'
   }
 ];
 
@@ -745,34 +1015,309 @@ export const INITIAL_DISCREPANCIES: DiscrepancyCase[] = [
     resolutionOutcome: 'Approved Replacement',
     detectedAt: '2026-10-23T15:05:00Z',
     updatedAt: '2026-10-24T11:00:00Z'
+  },
+  {
+    id: 'disc-04',
+    discrepancyNumber: 'DIS-2026-084',
+    shipmentId: 'shp-2026-005',
+    shipmentTracking: 'TRK-DHM-441209',
+    containerId: 'cnt-06',
+    containerNumber: 'CNT-DOCK-88',
+    productId: 'prod-001',
+    productName: 'Cryo-Shield Specimen Transporter',
+    sku: 'MED-CRYO-901',
+    type: 'Damaged Goods',
+    severity: 'High',
+    status: 'Detected',
+    expectedQuantity: 6,
+    observedQuantity: 5,
+    detectionStage: 'Vendor Receiving',
+    detectedBy: 'Sinu Gunshetty (Vendor Receiving)',
+    assignedInvestigator: 'Sinu Gunshetty',
+    evidence: [
+      {
+        id: 'evd-5',
+        type: 'Photo',
+        description: 'Physical damage identified during verification scanning. Shell fractured and thermal latch detached. Unit quarantined.',
+        timestamp: '2026-10-28T14:10:00Z',
+        uploadedBy: 'Sinu Gunshetty'
+      }
+    ],
+    resolutionNotes: 'Quarantined in Dock Bay 3. Inspection claim raised to Product Owner.',
+    resolutionOutcome: 'Pending',
+    detectedAt: '2026-10-28T14:05:00Z',
+    updatedAt: '2026-10-28T14:15:00Z'
+  },
+  {
+    id: 'disc-05',
+    discrepancyNumber: 'DIS-2026-088',
+    shipmentId: 'shp-2026-002',
+    shipmentTracking: 'TRK-DHM-991204',
+    containerId: 'cnt-03',
+    containerNumber: 'CNT-PAL-102',
+    productId: 'prod-005',
+    productName: 'IoT Telemetry Gateway Hub v3',
+    sku: 'ELEC-TELE-808',
+    type: 'Quantity Mismatch',
+    severity: 'Low',
+    status: 'Evidence Collected',
+    expectedQuantity: 15,
+    observedQuantity: 14,
+    detectionStage: 'Dispatch Verification',
+    detectedBy: 'Sinu Gunshetty',
+    assignedInvestigator: 'Dhruva (Product Owner)',
+    evidence: [
+      {
+        id: 'evd-6',
+        type: 'Scan Log',
+        description: 'Outbound staging barcode pass counted 14 serial items versus 15 manifest units.',
+        timestamp: '2026-10-28T10:15:00Z',
+        uploadedBy: 'Sinu Gunshetty'
+      }
+    ],
+    resolutionNotes: 'Pallet re-check ordered in Bay 4.',
+    resolutionOutcome: 'Pending',
+    detectedAt: '2026-10-28T10:12:00Z',
+    updatedAt: '2026-10-28T10:30:00Z'
+  },
+  {
+    id: 'disc-06',
+    discrepancyNumber: 'DIS-2026-092',
+    shipmentId: 'shp-2026-004',
+    shipmentTracking: 'TRK-DHM-662190',
+    containerId: 'cnt-05',
+    containerNumber: 'CNT-CRYO-09',
+    productId: 'prod-002',
+    productName: 'OptiTrace Diagnostic Sensor Array',
+    sku: 'BIO-DIAG-440',
+    type: 'Conflicting Record',
+    severity: 'Medium',
+    status: 'Under Review',
+    expectedQuantity: 6,
+    observedQuantity: 6,
+    detectionStage: 'Vendor Receiving',
+    detectedBy: 'Air Cargo Scanner Terminal',
+    assignedInvestigator: 'Dhruva (Product Owner)',
+    evidence: [
+      {
+        id: 'evd-7',
+        type: 'Manifest Compare',
+        description: 'Electronic Waybill serial prefix mismatch between carrier manifest and DHARM cryptographic hash.',
+        timestamp: '2026-10-28T08:00:00Z',
+        uploadedBy: 'Automated Carrier EDI Bridge'
+      }
+    ],
+    resolutionNotes: 'Carrier EDI reconciliation in progress.',
+    resolutionOutcome: 'Pending',
+    detectedAt: '2026-10-28T07:55:00Z',
+    updatedAt: '2026-10-28T08:15:00Z'
   }
 ];
 
 export const INITIAL_RETURNS: ReturnCase[] = [
   {
     id: 'ret-101',
-    returnNumber: 'RET-2026-044',
-    originalShipmentId: 'shp-2026-003',
-    trackingNumber: 'TRK-DHM-773410',
-    customerId: 'user-cust',
-    customerName: 'Anusha S (BioMed)',
+    returnNumber: 'RET-2026-089',
+    originalShipmentId: 'shp-2026-001',
+    trackingNumber: 'TRK-DHM-884920',
+    customerId: 'usr-cust-01',
+    customerName: 'Dr. Rajesh Sharma (Apollo Healthcare Diagnostics)',
+    productId: 'prod-001',
+    productName: 'Cryo-Shield Specimen Transporter',
+    sku: 'MED-CRYO-901',
+    quantity: 1,
+    reason: 'Damaged in Transit',
+    status: 'Received at Hub',
+    evidencePhotos: ['/dharm_logistics_hero.jpg'],
+    inspectionNotes: 'Customer reported deep impact cracks along the composite casing and broken latch mechanism upon arrival.',
+    quarantineLocation: 'Vendor Hub Staging Bay 2',
+    customerChoice: 'Replace Product',
+    vendorVerified: false,
+    problemDiagnosis: 'Customer stated: "Composite casing was cracked during transit and internal vacuum seal lost. Requesting immediate replacement shipment."',
+    requestedAt: '2026-10-28T09:15:00Z',
+    updatedAt: '2026-10-28T09:15:00Z'
+  },
+  {
+    id: 'ret-102',
+    returnNumber: 'RET-2026-102',
+    originalShipmentId: 'shp-2026-002',
+    trackingNumber: 'TRK-DHM-991204',
+    customerId: 'usr-cust-02',
+    customerName: 'Ananya Iyer (Max Super Specialty Hospital)',
     productId: 'prod-003',
     productName: 'BioReagent Lyophilized Stabilizer',
+    sku: 'PHRM-COLD-102',
+    quantity: 2,
+    reason: 'Defective Unit',
+    status: 'Received at Hub',
+    evidencePhotos: ['/dharm_logistics_hero.jpg'],
+    inspectionNotes: 'Customer unboxed shipment and found temperature breach indicator tripped; vials warm to the touch.',
+    quarantineLocation: 'Vendor Hub Receiving Staging Area',
+    customerChoice: 'Refund Amount',
+    refundAmount: 18400,
+    refundStatus: 'Pending',
+    vendorVerified: false,
+    problemDiagnosis: 'Customer stated: "Cold chain was broken during handling; temperature irreversibly rose above -20°C threshold. Reagents unusable. Requesting full refund."',
+    requestedAt: '2026-10-28T10:30:00Z',
+    updatedAt: '2026-10-28T10:30:00Z'
+  },
+  {
+    id: 'ret-103',
+    returnNumber: 'RET-2026-115',
+    originalShipmentId: 'shp-2026-001',
+    trackingNumber: 'TRK-DHM-884920',
+    customerId: 'usr-cust-03',
+    customerName: 'Priya Nair (Fortis Clinical Research)',
+    productId: 'prod-002',
+    productName: 'NanoPore Sterile Filtration Cartridge',
+    sku: 'MED-STER-551',
     quantity: 1,
     reason: 'Damaged in Transit',
     status: 'Quarantined',
     evidencePhotos: ['/dharm_logistics_hero.jpg'],
-    inspectionNotes: 'Liquid reagent breach confirmed. Unit placed in quarantine holding bin Q-4B. Not returned to active stock.',
-    quarantineLocation: 'Vendor Hub Quarantine Bay Q-4B',
-    replacementShipmentId: 'shp-2026-002',
-    requestedAt: '2026-10-23T15:20:00Z',
-    updatedAt: '2026-10-24T14:00:00Z'
+    inspectionNotes: 'Outer sterile packaging torn and filter frame crushed. Verified at vendor workbench.',
+    quarantineLocation: 'Vendor Hub Quarantine Bay Q-03',
+    customerChoice: 'Replace Product',
+    vendorVerified: true,
+    vendorVerifiedBy: 'Sinu Gunshetty (Vendor Quality Lead)',
+    vendorVerifiedAt: '2026-10-28T14:15:00Z',
+    problemDiagnosis: 'Severe puncture damage on primary sterile membrane during courier handling. Item quarantined. Replacement unit authorized.',
+    requestedAt: '2026-10-28T11:00:00Z',
+    updatedAt: '2026-10-28T14:15:00Z'
+  },
+  {
+    id: 'ret-104',
+    returnNumber: 'RET-2026-128',
+    originalShipmentId: 'shp-2026-003',
+    trackingNumber: 'TRK-DHM-773410',
+    customerId: 'usr-cust-04',
+    customerName: 'Vikramaditya Patel (Apex Bio-Labs)',
+    productId: 'prod-sas-01',
+    productName: 'SASAS (Copy)',
+    sku: 'GEN-SAS-001',
+    quantity: 1,
+    reason: 'Defective Unit',
+    status: 'Quarantined',
+    evidencePhotos: ['/dharm_logistics_hero.jpg'],
+    inspectionNotes: 'Terminal pin connector bent and housing fractured. Internal circuit short-circuit confirmed.',
+    quarantineLocation: 'Vendor Hub Quarantine Bay Q-09',
+    customerChoice: 'Refund Amount',
+    refundAmount: 14500,
+    refundStatus: 'Pending',
+    vendorVerified: true,
+    vendorVerifiedBy: 'Sinu Gunshetty (Vendor Quality Lead)',
+    vendorVerifiedAt: '2026-10-28T15:20:00Z',
+    problemDiagnosis: 'Internal short-circuit on power bus due to drop impact. Unit cannot be reworked. Customer requested full monetary refund.',
+    requestedAt: '2026-10-28T12:45:00Z',
+    updatedAt: '2026-10-28T15:20:00Z'
+  },
+  {
+    id: 'ret-105',
+    returnNumber: 'RET-2026-044',
+    originalShipmentId: 'shp-2026-003',
+    trackingNumber: 'TRK-DHM-773410',
+    customerId: 'usr-cust-05',
+    customerName: 'Dr. Suresh Mehta (Manipal Hospital)',
+    productId: 'prod-001',
+    productName: 'Cryo-Shield Specimen Transporter',
+    sku: 'MED-CRYO-901',
+    quantity: 1,
+    reason: 'Damaged in Transit',
+    status: 'Replacement Dispatched',
+    evidencePhotos: ['/dharm_logistics_hero.jpg'],
+    inspectionNotes: 'Thermal vacuum seal ruptured. Replacement unit expedited via priority air freight.',
+    quarantineLocation: 'Vendor Hub Quarantine Bay Q-04',
+    customerChoice: 'Replace Product',
+    replacementShipmentId: 'SHP-REP-2026-88201',
+    vendorVerified: true,
+    vendorVerifiedBy: 'Sinu Gunshetty (Vendor Quality Lead)',
+    vendorVerifiedAt: '2026-10-27T16:00:00Z',
+    problemDiagnosis: 'Outer composite shell hairline fracture verified. Replacement unit dispatched to customer facility.',
+    requestedAt: '2026-10-27T10:00:00Z',
+    updatedAt: '2026-10-27T16:30:00Z'
+  },
+  {
+    id: 'ret-106',
+    returnNumber: 'RET-2026-061',
+    originalShipmentId: 'shp-2026-002',
+    trackingNumber: 'TRK-DHM-991204',
+    customerId: 'usr-cust-06',
+    customerName: 'Kavita Reddy (Narayana Health Diagnostics)',
+    productId: 'prod-003',
+    productName: 'BioReagent Lyophilized Stabilizer',
+    sku: 'PHRM-COLD-102',
+    quantity: 2,
+    reason: 'Damaged in Transit',
+    status: 'Refund Processed',
+    evidencePhotos: ['/dharm_logistics_hero.jpg'],
+    inspectionNotes: 'Liquid reagent vial glass fractured during handling. Credit note issued to hospital account.',
+    quarantineLocation: 'Vendor Hub Bio-Hazard Scrap Bay B-1',
+    customerChoice: 'Refund Amount',
+    refundAmount: 28400,
+    refundStatus: 'Processed',
+    refundReference: 'RFND-2026-9041',
+    vendorVerified: true,
+    vendorVerifiedBy: 'Sinu Gunshetty (Vendor Quality Lead)',
+    vendorVerifiedAt: '2026-10-26T11:00:00Z',
+    problemDiagnosis: 'Impact shock fractured internal glass vials. Liquid chemical containment lost. Total loss refund issued.',
+    requestedAt: '2026-10-26T09:00:00Z',
+    updatedAt: '2026-10-26T11:45:00Z'
   }
 ];
 
 export const INITIAL_AUDIT_LOGS: AuditEvent[] = [
   {
     id: 'aud-001',
+    timestamp: '2026-10-28T15:20:00Z',
+    actorName: 'Sinu Gunshetty (Vendor)',
+    actorRole: 'VENDOR',
+    action: 'RETURN_INSPECTED',
+    entityType: 'Return',
+    entityId: 'ret-104',
+    details: 'Physical bench inspection completed for RET-2026-128. Electrical short confirmed. Quarantined in Bay Q-09. Refund approved.'
+  },
+  {
+    id: 'aud-002',
+    timestamp: '2026-10-28T14:15:00Z',
+    actorName: 'Sinu Gunshetty (Vendor)',
+    actorRole: 'VENDOR',
+    action: 'DISCREPANCY_FLAGGED',
+    entityType: 'Discrepancy',
+    entityId: 'disc-04',
+    details: 'Severe physical damage identified on Cryo-Shield unit during verification scan of TRK-DHM-441209. Unit quarantined in Bay 3.'
+  },
+  {
+    id: 'aud-003',
+    timestamp: '2026-10-28T13:45:00Z',
+    actorName: 'Sinu Gunshetty (Vendor)',
+    actorRole: 'VENDOR',
+    action: 'DOCK_RECEIPT_VERIFIED',
+    entityType: 'Shipment',
+    entityId: 'shp-2026-005',
+    details: 'Shipment TRK-DHM-441209 docked at Sorting Bay 3. Container CNT-DOCK-88 seal verified intact.'
+  },
+  {
+    id: 'aud-004',
+    timestamp: '2026-10-28T11:00:00Z',
+    actorName: 'Sinu Gunshetty (Vendor)',
+    actorRole: 'VENDOR',
+    action: 'SHIPMENT_DISPATCHED',
+    entityType: 'Shipment',
+    entityId: 'shp-2026-008',
+    details: 'Outbound delivery TRK-DHM-119940 handed over to BlueDart Dedicated Courier van with active GPS/Temp logger.'
+  },
+  {
+    id: 'aud-005',
+    timestamp: '2026-10-28T09:30:00Z',
+    actorName: 'Dhruva (Owner)',
+    actorRole: 'OWNER',
+    action: 'SHIPMENT_DISPATCHED',
+    entityType: 'Shipment',
+    entityId: 'shp-2026-006',
+    details: 'Bulk filter shipment TRK-DHM-551020 dispatched from Central Depot on I-80 corridor.'
+  },
+  {
+    id: 'aud-006',
     timestamp: '2026-10-28T09:15:22Z',
     actorName: 'Dhruva (Owner)',
     actorRole: 'OWNER',
@@ -782,7 +1327,17 @@ export const INITIAL_AUDIT_LOGS: AuditEvent[] = [
     details: 'Sealed container CNT-PAL-102 with tamper-evident RFID tag SEAL-RFID-77192.'
   },
   {
-    id: 'aud-002',
+    id: 'aud-007',
+    timestamp: '2026-10-27T16:00:00Z',
+    actorName: 'Sinu Gunshetty (Vendor)',
+    actorRole: 'VENDOR',
+    action: 'REPLACEMENT_DISPATCHED',
+    entityType: 'Return',
+    entityId: 'ret-105',
+    details: 'Replacement Cryo-Shield unit SHP-REP-2026-88201 dispatched via priority air freight for customer Dr. Suresh Mehta.'
+  },
+  {
+    id: 'aud-008',
     timestamp: '2026-10-27T09:40:11Z',
     actorName: 'DHARM Discrepancy Engine',
     actorRole: 'VENDOR',
@@ -792,7 +1347,7 @@ export const INITIAL_AUDIT_LOGS: AuditEvent[] = [
     details: 'Missing 2 units detected during receipt reconciliation for shipment TRK-DHM-884920.'
   },
   {
-    id: 'aud-003',
+    id: 'aud-009',
     timestamp: '2026-10-26T14:30:00Z',
     actorName: 'Dhruva (Owner)',
     actorRole: 'OWNER',
@@ -802,7 +1357,17 @@ export const INITIAL_AUDIT_LOGS: AuditEvent[] = [
     details: 'Manifest signed with SHA-256 seal. Shipment transferred to Trans-Express Logistics.'
   },
   {
-    id: 'aud-004',
+    id: 'aud-010',
+    timestamp: '2026-10-26T11:45:00Z',
+    actorName: 'Sinu Gunshetty (Vendor)',
+    actorRole: 'VENDOR',
+    action: 'REFUND_PROCESSED',
+    entityType: 'Return',
+    entityId: 'ret-106',
+    details: 'Monetary refund voucher RFND-2026-9041 for ₹28,400 authorized and settled for Kavita Reddy (Narayana Health).'
+  },
+  {
+    id: 'aud-011',
     timestamp: '2026-10-23T14:45:00Z',
     actorName: 'Anusha S (Customer)',
     actorRole: 'CUSTOMER',
@@ -817,6 +1382,78 @@ export const INITIAL_SCAN_RECORDS: ScanRecord[] = [
   {
     id: 'scn-01',
     scannedCode: 'BC-901-CRYO-8821',
+    scannedAt: '2026-10-28T14:12:10Z',
+    scannedBy: 'Sinu Gunshetty',
+    role: 'VENDOR',
+    shipmentId: 'shp-2026-005',
+    containerId: 'cnt-06',
+    type: 'Product',
+    result: 'Expected Match',
+    notes: 'Unit 1 of 6 verified in Dock Bay 3.'
+  },
+  {
+    id: 'scn-02',
+    scannedCode: 'BC-901-CRYO-8821',
+    scannedAt: '2026-10-28T14:12:15Z',
+    scannedBy: 'Sinu Gunshetty',
+    role: 'VENDOR',
+    shipmentId: 'shp-2026-005',
+    containerId: 'cnt-06',
+    type: 'Product',
+    result: 'Duplicate Attempt',
+    notes: 'Blocked duplicate barcode scan within 5 seconds.'
+  },
+  {
+    id: 'scn-03',
+    scannedCode: 'BC-440-SENS-7719',
+    scannedAt: '2026-10-28T14:14:40Z',
+    scannedBy: 'Sinu Gunshetty',
+    role: 'VENDOR',
+    shipmentId: 'shp-2026-005',
+    containerId: 'cnt-06',
+    type: 'Product',
+    result: 'Expected Match',
+    notes: 'OptiTrace Sensor Array lot verified.'
+  },
+  {
+    id: 'scn-04',
+    scannedCode: 'CNT-DOCK-88',
+    scannedAt: '2026-10-28T13:45:00Z',
+    scannedBy: 'Sinu Gunshetty',
+    role: 'VENDOR',
+    shipmentId: 'shp-2026-005',
+    containerId: 'cnt-06',
+    type: 'Container',
+    result: 'Expected Match',
+    notes: 'Tamper-evident seal SEAL-DCK-77112 confirmed intact.'
+  },
+  {
+    id: 'scn-05',
+    scannedCode: 'BC-102-BIO-3320',
+    scannedAt: '2026-10-28T10:55:00Z',
+    scannedBy: 'Sinu Gunshetty',
+    role: 'VENDOR',
+    shipmentId: 'shp-2026-008',
+    containerId: 'cnt-02',
+    type: 'Product',
+    result: 'Expected Match',
+    notes: 'Outbound dispatch verification scan.'
+  },
+  {
+    id: 'scn-06',
+    scannedCode: 'BC-551-FILT-6652',
+    scannedAt: '2026-10-27T10:12:00Z',
+    scannedBy: 'Sinu Gunshetty',
+    role: 'VENDOR',
+    shipmentId: 'shp-2026-001',
+    containerId: 'cnt-02',
+    type: 'Product',
+    result: 'Unexpected Product',
+    notes: 'Barcode detected inside CNT-SEC-409 but unlisted in manifest.'
+  },
+  {
+    id: 'scn-07',
+    scannedCode: 'BC-901-CRYO-8821',
     scannedAt: '2026-10-27T09:32:10Z',
     scannedBy: 'Sinu Gunshetty',
     role: 'VENDOR',
@@ -827,27 +1464,39 @@ export const INITIAL_SCAN_RECORDS: ScanRecord[] = [
     notes: 'Item 1 of 12 verified.'
   },
   {
-    id: 'scn-02',
-    scannedCode: 'BC-901-CRYO-8821',
-    scannedAt: '2026-10-27T09:32:15Z',
+    id: 'scn-08',
+    scannedCode: 'CNT-ALPHA-881',
+    scannedAt: '2026-10-27T08:15:00Z',
     scannedBy: 'Sinu Gunshetty',
     role: 'VENDOR',
     shipmentId: 'shp-2026-001',
     containerId: 'cnt-01',
-    type: 'Product',
-    result: 'Duplicate Attempt',
-    notes: 'Blocked duplicate barcode scan within 5 seconds.'
+    type: 'Container',
+    result: 'Expected Match',
+    notes: 'Container arrival check-in at Midwest Sorting Hub 4.'
   },
   {
-    id: 'scn-03',
-    scannedCode: 'BC-440-SENS-7719',
-    scannedAt: '2026-10-27T09:35:40Z',
-    scannedBy: 'Sinu Gunshetty',
-    role: 'VENDOR',
-    shipmentId: 'shp-2026-001',
+    id: 'scn-09',
+    scannedCode: 'BC-808-GATE-1194',
+    scannedAt: '2026-10-28T09:05:00Z',
+    scannedBy: 'Dhruva',
+    role: 'OWNER',
+    shipmentId: 'shp-2026-002',
+    containerId: 'cnt-03',
+    type: 'Product',
+    result: 'Expected Match',
+    notes: 'Telemetry Hub verified before RFID pallet seal.'
+  },
+  {
+    id: 'scn-10',
+    scannedCode: 'BC-102-BIO-3320',
+    scannedAt: '2026-10-23T14:40:00Z',
+    scannedBy: 'Anusha S',
+    role: 'CUSTOMER',
+    shipmentId: 'shp-2026-003',
     containerId: 'cnt-01',
     type: 'Product',
     result: 'Expected Match',
-    notes: 'Item verified and added to receipt count.'
+    notes: 'Customer receiving dock verification.'
   }
 ];

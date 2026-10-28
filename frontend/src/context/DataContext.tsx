@@ -5,6 +5,7 @@ import type {
   Shipment,
   DiscrepancyCase,
   ReturnCase,
+  CustomerResolutionChoice,
   AuditEvent,
   ScanRecord,
   DiscrepancyStatus,
@@ -59,6 +60,14 @@ interface DataContextType {
   confirmCustomerDelivery: (shipmentId: string, actorName: string, notes: string) => void;
   createReturnRequest: (returnData: Omit<ReturnCase, 'id' | 'returnNumber' | 'status' | 'requestedAt' | 'updatedAt'>, actorName: string) => ReturnCase;
   updateReturnStatus: (id: string, status: ReturnCase['status'], inspectionNotes?: string, quarantineLoc?: string, actorName?: string) => void;
+  setCustomerReturnChoice: (id: string, choice: CustomerResolutionChoice, actorName?: string) => void;
+  inspectAndVerifyReturn: (id: string, diagnosis: string, notes: string, quarantineLoc: string, actorName?: string) => void;
+  processReturnResolution: (
+    id: string,
+    resolution: CustomerResolutionChoice,
+    details?: { replacementShipmentTracking?: string; refundReference?: string; refundAmount?: number },
+    actorName?: string
+  ) => void;
   resetDemoData: () => void;
 }
 
@@ -83,33 +92,77 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [containers, setContainers] = useState<Container[]>(() => {
-    const s = localStorage.getItem('dharm_containers');
-    return s ? JSON.parse(s) : INITIAL_CONTAINERS;
+    const s = localStorage.getItem('dharm_containers_v7');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_CONTAINERS.length) return parsed;
+      } catch {}
+    }
+    localStorage.removeItem('dharm_containers');
+    return INITIAL_CONTAINERS;
   });
 
   const [shipments, setShipments] = useState<Shipment[]>(() => {
-    const s = localStorage.getItem('dharm_shipments');
-    return s ? JSON.parse(s) : INITIAL_SHIPMENTS;
+    const s = localStorage.getItem('dharm_shipments_v7');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_SHIPMENTS.length) return parsed;
+      } catch {}
+    }
+    localStorage.removeItem('dharm_shipments');
+    return INITIAL_SHIPMENTS;
   });
 
   const [discrepancies, setDiscrepancies] = useState<DiscrepancyCase[]>(() => {
-    const s = localStorage.getItem('dharm_discrepancies');
-    return s ? JSON.parse(s) : INITIAL_DISCREPANCIES;
+    const s = localStorage.getItem('dharm_discrepancies_v7');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_DISCREPANCIES.length) return parsed;
+      } catch {}
+    }
+    localStorage.removeItem('dharm_discrepancies');
+    return INITIAL_DISCREPANCIES;
   });
 
   const [returns, setReturns] = useState<ReturnCase[]>(() => {
-    const s = localStorage.getItem('dharm_returns');
-    return s ? JSON.parse(s) : INITIAL_RETURNS;
+    const s = localStorage.getItem('dharm_returns_v7');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_RETURNS.length) return parsed;
+      } catch {}
+    }
+    localStorage.removeItem('dharm_returns_v6');
+    localStorage.removeItem('dharm_returns_v3');
+    localStorage.removeItem('dharm_returns');
+    return INITIAL_RETURNS;
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditEvent[]>(() => {
-    const s = localStorage.getItem('dharm_audit');
-    return s ? JSON.parse(s) : INITIAL_AUDIT_LOGS;
+    const s = localStorage.getItem('dharm_audit_v7');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_AUDIT_LOGS.length) return parsed;
+      } catch {}
+    }
+    localStorage.removeItem('dharm_audit');
+    return INITIAL_AUDIT_LOGS;
   });
 
   const [scanRecords, setScanRecords] = useState<ScanRecord[]>(() => {
-    const s = localStorage.getItem('dharm_scans');
-    return s ? JSON.parse(s) : INITIAL_SCAN_RECORDS;
+    const s = localStorage.getItem('dharm_scans_v7');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_SCAN_RECORDS.length) return parsed;
+      } catch {}
+    }
+    localStorage.removeItem('dharm_scans');
+    return INITIAL_SCAN_RECORDS;
   });
 
   // Sync to localStorage
@@ -118,21 +171,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('dharm_products', JSON.stringify(products));
   }, [products]);
   useEffect(() => {
+    localStorage.setItem('dharm_containers_v7', JSON.stringify(containers));
     localStorage.setItem('dharm_containers', JSON.stringify(containers));
   }, [containers]);
   useEffect(() => {
+    localStorage.setItem('dharm_shipments_v7', JSON.stringify(shipments));
     localStorage.setItem('dharm_shipments', JSON.stringify(shipments));
   }, [shipments]);
   useEffect(() => {
+    localStorage.setItem('dharm_discrepancies_v7', JSON.stringify(discrepancies));
     localStorage.setItem('dharm_discrepancies', JSON.stringify(discrepancies));
   }, [discrepancies]);
   useEffect(() => {
+    localStorage.setItem('dharm_returns_v7', JSON.stringify(returns));
     localStorage.setItem('dharm_returns', JSON.stringify(returns));
   }, [returns]);
   useEffect(() => {
+    localStorage.setItem('dharm_audit_v7', JSON.stringify(auditLogs));
     localStorage.setItem('dharm_audit', JSON.stringify(auditLogs));
   }, [auditLogs]);
   useEffect(() => {
+    localStorage.setItem('dharm_scans_v7', JSON.stringify(scanRecords));
     localStorage.setItem('dharm_scans', JSON.stringify(scanRecords));
   }, [scanRecords]);
 
@@ -656,6 +715,94 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logAudit(actorName, 'VENDOR', 'RETURN_STATUS_UPDATED', 'Return', id, `Return status changed to ${status}. Quarantine: ${quarantineLoc || 'N/A'}`);
   };
 
+  const setCustomerReturnChoice = (
+    id: string,
+    choice: CustomerResolutionChoice,
+    actorName: string = 'Customer'
+  ) => {
+    const now = new Date().toISOString();
+    setReturns(prev =>
+      prev.map(r => {
+        if (r.id === id) {
+          return {
+            ...r,
+            customerChoice: choice,
+            updatedAt: now
+          };
+        }
+        return r;
+      })
+    );
+    logAudit(actorName, 'CUSTOMER', 'RESOLUTION_CHOICE_SET', 'Return', id, `Customer designated resolution preference: ${choice}`);
+  };
+
+  const inspectAndVerifyReturn = (
+    id: string,
+    diagnosis: string,
+    notes: string,
+    quarantineLoc: string,
+    actorName: string = 'Sinu Gunshetty'
+  ) => {
+    const now = new Date().toISOString();
+    setReturns(prev =>
+      prev.map(r => {
+        if (r.id === id) {
+          return {
+            ...r,
+            status: 'Inspected',
+            vendorVerified: true,
+            vendorVerifiedBy: actorName,
+            vendorVerifiedAt: now,
+            problemDiagnosis: diagnosis,
+            inspectionNotes: notes,
+            quarantineLocation: quarantineLoc,
+            updatedAt: now
+          };
+        }
+        return r;
+      })
+    );
+    logAudit(actorName, 'VENDOR', 'RETURN_INSPECTED', 'Return', id, `Vendor verified defect for return ${id}: ${diagnosis}. Quarantined at ${quarantineLoc}`);
+  };
+
+  const processReturnResolution = (
+    id: string,
+    resolution: CustomerResolutionChoice,
+    details?: { replacementShipmentTracking?: string; refundReference?: string; refundAmount?: number },
+    actorName: string = 'Sinu Gunshetty'
+  ) => {
+    const now = new Date().toISOString();
+    setReturns(prev =>
+      prev.map(r => {
+        if (r.id === id) {
+          if (resolution === 'Replace Product') {
+            const tracking = details?.replacementShipmentTracking || `TRK-REP-${Math.floor(10000 + Math.random() * 90000)}`;
+            return {
+              ...r,
+              status: 'Replacement Dispatched',
+              customerChoice: 'Replace Product',
+              replacementShipmentId: tracking,
+              updatedAt: now
+            };
+          } else {
+            const ref = details?.refundReference || `RFND-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+            return {
+              ...r,
+              status: 'Refund Processed',
+              customerChoice: 'Refund Amount',
+              refundStatus: 'Processed',
+              refundReference: ref,
+              refundAmount: details?.refundAmount || r.refundAmount || 14500,
+              updatedAt: now
+            };
+          }
+        }
+        return r;
+      })
+    );
+    logAudit(actorName, 'VENDOR', 'RETURN_RESOLVED', 'Return', id, `Processed customer resolution choice (${resolution}) for return ${id}`);
+  };
+
   const resetDemoData = () => {
     setProducts(INITIAL_PRODUCTS);
     setContainers(INITIAL_CONTAINERS);
@@ -690,6 +837,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         confirmCustomerDelivery,
         createReturnRequest,
         updateReturnStatus,
+        setCustomerReturnChoice,
+        inspectAndVerifyReturn,
+        processReturnResolution,
         resetDemoData
       }}
     >

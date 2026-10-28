@@ -30,8 +30,27 @@ export const VendorOutgoing: React.FC = () => {
     s => s.status === 'In Transit' || s.status === 'Delivered' || s.status === 'Partially Delivered'
   );
 
-  const handleCreateOutgoing = (e: React.FormEvent) => {
+  const handleCreateOutgoing = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Call backend API to persist to PostgreSQL
+    try {
+      await fetch('http://localhost:8000/api/shipments/outbound', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_consignee: customerName,
+          facility_address: destination,
+          courier_vehicle: carrierVehicle,
+          delivery_notes: notes,
+          origin: 'Midwest Sorting Hub 4 (Cross-Dock)',
+          vendor_name: 'Trans-Express Regional Logistics',
+          status: 'In Transit'
+        })
+      });
+    } catch (err) {
+      console.warn('Backend API call note:', err);
+    }
 
     createShipment(
       {

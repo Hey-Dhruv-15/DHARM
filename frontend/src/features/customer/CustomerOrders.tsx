@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
+import { orderApi } from '../../services/orderApi';
 import { useAuth } from '../../context/AuthContext';
 import { Modal } from '../../components/common/Modal';
 import {
@@ -26,6 +27,7 @@ export const CustomerOrders: React.FC = () => {
   const { user } = useAuth();
   const {
     orders,
+    refreshOrders,
     customerProfile,
     submitCustomerDiscrepancy,
     discrepancies

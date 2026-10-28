@@ -25,6 +25,7 @@ import {
   type DiscrepancySubmissionInput
 } from '../services/customerApi';
 import { productApi } from '../services/productApi';
+import { orderApi } from '../services/orderApi';
 import {
   INITIAL_PRODUCTS,
   INITIAL_CONTAINERS,
@@ -95,6 +96,7 @@ interface DataContextType {
   resetDemoData: () => void;
 
   // Customer Portal Actions
+  refreshOrders: () => Promise<void>;
   placeCustomerOrder: (
     orderData: {
       items: Array<{
@@ -299,6 +301,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Sync initial returns & discrepancies from backend
   useEffect(() => {
     // Sync master products from backend REST API (GET /api/products)
+    // Sync master orders from backend REST API (GET /api/orders)
+    orderApi.listOrders()
+      .then(apiOrders => {
+        if (Array.isArray(apiOrders) && apiOrders.length > 0) {
+          setOrders(prev => {
+            const apiIds = new Set(apiOrders.map(o => o.id));
+            const remain = prev.filter(o => !apiIds.has(o.id));
+            return [...apiOrders, ...remain];
+          });
+        }
+      })
+      .catch(err => console.debug('Notice fetching orders from API:', err));
+
     productApi.listProducts()
       .then(apiProducts => {
         if (Array.isArray(apiProducts) && apiProducts.length > 0) {
@@ -1233,6 +1248,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logAudit(actorName, 'VENDOR', 'RETURN_STATUS_UPDATED', 'Return', id, `Return status changed to ${status}. Quarantine: ${quarantineLoc || 'N/A'}`);
   };
 
+  const refreshOrders = async () => {
+    try {
+      const apiOrders = await orderApi.listOrders();
+      if (Array.isArray(apiOrders) && apiOrders.length > 0) {
+        setOrders(prev => {
+          const apiIds = new Set(apiOrders.map(o => o.id));
+          const remain = prev.filter(o => !apiIds.has(o.id));
+          return [...apiOrders, ...remain];
+        });
+      }
+    } catch (err) {
+      console.debug('Notice refreshing orders from API:', err);
+    }
+  };
+
   // Customer Portal Methods
   const placeCustomerOrder = (
     orderData: {
@@ -1821,6 +1851,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         orders,
         customerProfile,
         notifications,
+        refreshOrders,
         placeCustomerOrder,
         updateOrderStatus,
         cancelCustomerOrder,

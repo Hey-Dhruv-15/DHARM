@@ -63,7 +63,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { to: '/vendor/discrepancies', label: 'Exceptions & Damaged', icon: AlertTriangle, badge: openExceptionsCount > 0 ? openExceptionsCount.toString() : undefined },
         { to: '/vendor/inventory', label: 'Hub Stock', icon: Layers },
         { to: '/vendor/shipments/outgoing', label: 'Outgoing Deliveries', icon: Send },
-        { to: '/vendor/returns', label: 'Quarantine & Returns', icon: RotateCcw },
         { to: '/vendor/settings', label: 'Settings', icon: Settings }
       ];
     } else {

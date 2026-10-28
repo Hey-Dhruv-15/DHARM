@@ -1,140 +1,149 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Modal } from '../../components/common/Modal';
+import { CustomerDamagedReports } from './CustomerDamagedReports';
 import {
-  AlertTriangle,
   Plus,
-  Camera,
-  Search,
   CheckCircle2,
-  FileText,
+  Search,
   ShieldAlert,
-  RotateCcw,
-  Warehouse,
-  Eye,
-  ArrowRight,
-  Package,
-  Layers,
-  UserCheck,
-  Building,
-  User,
-  Clock
+  RotateCcw
 } from 'lucide-react';
-import type { DiscrepancyCase, DiscrepancyType, DiscrepancySeverity, DiscrepancyStatus } from '../../types';
+import type { DiscrepancyType, DiscrepancySeverity } from '../../types';
 
 export const VendorDiscrepancies: React.FC = () => {
-  const navigate = useNavigate();
-  const { discrepancies, shipments, products, reportDiscrepancy, updateDiscrepancyStatus } = useData();
+  const { discrepancies, shipments, products, returns, reportDiscrepancy } = useData();
   const { user, role } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  // Search & Filter State
+  const [activeTab, setActiveTab] = useState<'dock-discrepancies' | 'customer-damaged'>('dock-discrepancies');
+  const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [filterTab, setFilterTab] = useState<'ALL' | 'CUSTOMER_REPORTED' | 'DAMAGED' | 'UNDER_REVIEW'>('ALL');
+  const [newlyCreatedCaseId, setNewlyCreatedCaseId] = useState<string | null>(null);
+  const [successBanner, setSuccessBanner] = useState<{ number: string; tracking: string } | null>(null);
 
-  // Vendor Action / Investigation Modal State
-  const [selectedCase, setSelectedCase] = useState<DiscrepancyCase | null>(null);
-  const [investigateModalOpen, setInvestigateModalOpen] = useState(false);
-  const [vendorQuarantineBay, setVendorQuarantineBay] = useState('Vendor Hub Quarantine Bay Q-4B');
-  const [targetStatus, setTargetStatus] = useState<DiscrepancyStatus>('Under Review');
-  const [vendorNotes, setVendorNotes] = useState('');
-  const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
-
-  // Report Exception Modal State (Vendor-initiated)
-  const [reportModalOpen, setReportModalOpen] = useState(false);
+  // Report Form State
   const [selectedShipmentId, setSelectedShipmentId] = useState(shipments[0]?.id || '');
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.id || '');
   const [type, setType] = useState<DiscrepancyType>('Damaged Goods');
   const [severity, setSeverity] = useState<DiscrepancySeverity>('Medium');
   const [expectedQty, setExpectedQty] = useState(1);
   const [observedQty, setObservedQty] = useState(0);
-  const [reportNotes, setReportNotes] = useState('');
+  const [notes, setNotes] = useState('');
 
-  // Counts for Tabs
-  const customerReportedCount = useMemo(() => {
-    return discrepancies.filter(d => d.detectionStage === 'Customer Handover' || Boolean(d.orderNumber) || d.detectedBy.toLowerCase().includes('customer') || d.detectedBy.toLowerCase().includes('anusha')).length;
-  }, [discrepancies]);
-
-  const damagedCount = useMemo(() => {
-    return discrepancies.filter(d => d.type === 'Damaged Goods').length;
-  }, [discrepancies]);
-
-  const underReviewCount = useMemo(() => {
-    return discrepancies.filter(d => d.status !== 'Resolved').length;
-  }, [discrepancies]);
-
-  // Filtering
-  const filtered = useMemo(() => {
-    let list = [...discrepancies];
-
-    if (filterTab === 'CUSTOMER_REPORTED') {
-      list = list.filter(d => d.detectionStage === 'Customer Handover' || Boolean(d.orderNumber) || d.detectedBy.toLowerCase().includes('customer') || d.detectedBy.toLowerCase().includes('anusha'));
-    } else if (filterTab === 'DAMAGED') {
-      list = list.filter(d => d.type === 'Damaged Goods');
-    } else if (filterTab === 'UNDER_REVIEW') {
-      list = list.filter(d => d.status !== 'Resolved');
+  // Handle incoming routing from scanner (e.g., Report Damaged button in Image 1) or customer damaged tab
+  useEffect(() => {
+    if (
+      location.pathname.includes('customer-damaged') ||
+      location.search.includes('customer-damaged') ||
+      (location.state as any)?.activeTab === 'customer-damaged'
+    ) {
+      setActiveTab('customer-damaged');
     }
 
-    const q = search.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
-        d =>
-          d.discrepancyNumber.toLowerCase().includes(q) ||
-          d.shipmentTracking.toLowerCase().includes(q) ||
-          (d.orderNumber && d.orderNumber.toLowerCase().includes(q)) ||
-          (d.customerName && d.customerName.toLowerCase().includes(q)) ||
-          (d.productName && d.productName.toLowerCase().includes(q)) ||
-          d.type.toLowerCase().includes(q) ||
-          (d.resolutionNotes && d.resolutionNotes.toLowerCase().includes(q))
-      );
+    const state = location.state as {
+      openReportModal?: boolean;
+      shipmentId?: string;
+      productId?: string;
+      sku?: string;
+      type?: DiscrepancyType;
+      severity?: DiscrepancySeverity;
+      expectedQty?: number;
+      observedQty?: number;
+      notes?: string;
+      activeTab?: 'dock-discrepancies' | 'customer-damaged';
+    } | null;
+
+    if (state?.activeTab) {
+      setActiveTab(state.activeTab);
     }
 
-    // Sort newest first
-    list.sort((a, b) => new Date(b.detectedAt || 0).getTime() - new Date(a.detectedAt || 0).getTime());
-    return list;
-  }, [discrepancies, filterTab, search]);
+    if (state?.openReportModal) {
+      setActiveTab('dock-discrepancies');
 
-  const handleOpenInvestigate = (c: DiscrepancyCase) => {
-    setSelectedCase(c);
-    setTargetStatus(c.status);
-    setVendorNotes(c.resolutionNotes || '');
-    setVendorQuarantineBay('Vendor Hub Quarantine Bay Q-4B');
-    setActionSuccessMsg(null);
-    setInvestigateModalOpen(true);
+      if (state.shipmentId && shipments.some(s => s.id === state.shipmentId)) {
+        setSelectedShipmentId(state.shipmentId);
+      } else if (shipments.length > 0) {
+        setSelectedShipmentId(shipments[0].id);
+      }
+
+      if (state.productId && products.some(p => p.id === state.productId)) {
+        setSelectedProductId(state.productId);
+      } else if (state.sku) {
+        const found = products.find(p => p.sku === state.sku);
+        if (found) setSelectedProductId(found.id);
+      } else if (products.length > 0) {
+        setSelectedProductId(products[0].id);
+      }
+
+      if (state.type) {
+        setType(state.type);
+      } else {
+        setType('Damaged Goods');
+      }
+
+      if (state.severity) {
+        setSeverity(state.severity);
+      } else {
+        setSeverity('Medium');
+      }
+
+      if (typeof state.expectedQty === 'number') {
+        setExpectedQty(state.expectedQty);
+      } else {
+        setExpectedQty(1);
+      }
+
+      if (typeof state.observedQty === 'number') {
+        setObservedQty(state.observedQty);
+      } else {
+        setObservedQty(0);
+      }
+
+      if (typeof state.notes === 'string') {
+        setNotes(state.notes);
+      }
+
+      setModalOpen(true);
+
+      // Clean up navigation state in history so reload doesn't trigger modal again
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, location.pathname, location.search, shipments, products, navigate]);
+
+  const handleShipmentChange = (shipId: string) => {
+    setSelectedShipmentId(shipId);
+    const shp = shipments.find(s => s.id === shipId);
+    if (shp && shp.items.length > 0) {
+      const firstItem = shp.items[0];
+      const prod = products.find(p => p.id === firstItem.productId || p.sku === firstItem.sku);
+      if (prod) {
+        setSelectedProductId(prod.id);
+        setExpectedQty(firstItem.expectedQuantity);
+        setObservedQty(0);
+      }
+    }
   };
 
-  const handleSaveInvestigation = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedCase) return;
-
-    const fullNote = vendorNotes.trim()
-      ? `${vendorNotes.trim()} [Quarantine Assigned: ${vendorQuarantineBay}]`
-      : `Inspected by Vendor Logistics (${user?.name || 'Sinu Gunshetty'}). Assigned to ${vendorQuarantineBay}.`;
-
-    updateDiscrepancyStatus(
-      selectedCase.id,
-      targetStatus,
-      fullNote,
-      selectedCase.resolutionOutcome || 'Pending',
-      user?.name || 'Sinu Gunshetty (Vendor)',
-      'VENDOR'
-    );
-
-    setActionSuccessMsg(`Updated case #${selectedCase.discrepancyNumber} to ${targetStatus}.`);
-    setTimeout(() => {
-      setInvestigateModalOpen(false);
-      setActionSuccessMsg(null);
-    }, 1500);
+  const handleProductChange = (prodId: string) => {
+    setSelectedProductId(prodId);
+    const shp = shipments.find(s => s.id === selectedShipmentId);
+    const item = shp?.items.find(i => i.productId === prodId);
+    if (item) {
+      setExpectedQty(item.expectedQuantity);
+    }
   };
 
-  const handleCreateVendorReport = (e: React.FormEvent) => {
+  const handleReport = (e: React.FormEvent) => {
     e.preventDefault();
     const shipment = shipments.find(s => s.id === selectedShipmentId);
     const product = products.find(p => p.id === selectedProductId);
 
-    reportDiscrepancy(
+    const newCase = reportDiscrepancy(
       {
         shipmentId: selectedShipmentId,
         shipmentTracking: shipment ? shipment.trackingNumber : 'TRK-UNKNOWN',
@@ -154,545 +163,341 @@ export const VendorDiscrepancies: React.FC = () => {
           {
             id: `evd-${Date.now()}`,
             type: 'Photo',
-            description: reportNotes || 'Physical inspection noted exception at dock arrival.',
+            description: notes || 'Physical damage / packaging defect identified during verification scanning. Unit quarantined.',
             timestamp: new Date().toISOString(),
             uploadedBy: user?.name || 'Sinu Gunshetty'
           }
         ],
-        resolutionNotes: 'Flagged by vendor dock inspection. Awaiting QA review.'
+        resolutionNotes: 'Flagged by vendor inspection. Awaiting Owner review.'
       },
       user?.name || 'Sinu Gunshetty',
       role || 'VENDOR'
     );
 
-    setReportModalOpen(false);
-    setReportNotes('');
+    setNewlyCreatedCaseId(newCase.id);
+    setSuccessBanner({
+      number: newCase.discrepancyNumber,
+      tracking: shipment ? shipment.trackingNumber : selectedShipmentId
+    });
+    setModalOpen(false);
+    setNotes('');
   };
+
+  const filtered = discrepancies.filter(
+    d =>
+      d.discrepancyNumber.toLowerCase().includes(search.toLowerCase()) ||
+      d.shipmentTracking.toLowerCase().includes(search.toLowerCase()) ||
+      (d.productName && d.productName.toLowerCase().includes(search.toLowerCase())) ||
+      d.type.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Carrier Hub Exception & Reverse Logistics Custody
+      {/* Top Module Segment Switcher */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-xl flex-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab('dock-discrepancies')}
+            className={`flex-1 py-2.5 px-4 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer ${
+              activeTab === 'dock-discrepancies'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <ShieldAlert className={`w-4 h-4 ${activeTab === 'dock-discrepancies' ? 'text-amber-600' : 'text-slate-400'}`} />
+            <span>Dock Barcode & Receiving Damaged</span>
+            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+              {discrepancies.length}
             </span>
-          </div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
-            Exceptions & Damaged Goods
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Real-time feed of customer damage reports, dock shipment discrepancies, and quarantine custody management.
-          </p>
-        </div>
+          </button>
 
-        <button
-          onClick={() => setReportModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition cursor-pointer self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Report Hub Exception</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('customer-damaged')}
+            className={`flex-1 py-2.5 px-4 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer ${
+              activeTab === 'customer-damaged'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <RotateCcw className={`w-4 h-4 ${activeTab === 'customer-damaged' ? 'text-rose-600' : 'text-slate-400'}`} />
+            <span>Customer Damaged Reports & Resolution</span>
+            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
+              {returns.length}
+            </span>
+          </button>
+        </div>
       </div>
 
-      {/* Top Search & Filter Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-xl">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+      {activeTab === 'customer-damaged' ? (
+        <CustomerDamagedReports />
+      ) : (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                Vendor Discrepancy & Damage Reports
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                Log physical exceptions, missing units, damaged seals, and unexpected unmanifested items.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Report Exception</span>
+            </button>
+          </div>
+
+          {/* Success Notification Banner when discrepancy added */}
+          {successBanner && (
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center justify-between gap-3 shadow-xs animate-in fade-in duration-300">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold">
+                    Exception Case <span className="font-mono text-emerald-950 font-extrabold">{successBanner.number}</span> Successfully Logged!
+                  </h4>
+                  <p className="text-xs text-emerald-800 mt-0.5">
+                    Damaged unit for shipment <span className="font-mono font-bold">{successBanner.tracking}</span> has been quarantined and recorded into the exceptions table below.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSuccessBanner(null)}
+                className="text-emerald-700 hover:text-emerald-950 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search exceptions by Case #, Order #, Customer, Tracking, or SKU..."
-              className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              placeholder="Filter by Case #, Shipment Tracking, SKU, or exception type..."
+              className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm bg-white border border-slate-200/80 rounded-xl shadow-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
 
-          {/* Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-            <button
-              onClick={() => setFilterTab('ALL')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
-                filterTab === 'ALL'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              All Exceptions ({discrepancies.length})
-            </button>
-
-            <button
-              onClick={() => setFilterTab('CUSTOMER_REPORTED')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
-                filterTab === 'CUSTOMER_REPORTED'
-                  ? 'bg-rose-600 text-white shadow-xs'
-                  : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-rose-500" />
-              <span>Customer Reports ({customerReportedCount})</span>
-            </button>
-
-            <button
-              onClick={() => setFilterTab('DAMAGED')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
-                filterTab === 'DAMAGED'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Damaged Goods ({damagedCount})
-            </button>
-
-            <button
-              onClick={() => setFilterTab('UNDER_REVIEW')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
-                filterTab === 'UNDER_REVIEW'
-                  ? 'bg-sky-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Under Review ({underReviewCount})
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Discrepancies Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs sm:text-sm">
-            <thead className="bg-slate-50/75 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
-              <tr>
-                <th className="py-3.5 px-4">Case # & Origin</th>
-                <th className="py-3.5 px-4">Order & Customer</th>
-                <th className="py-3.5 px-4">Deliverable & SKU</th>
-                <th className="py-3.5 px-4">Problem Category</th>
-                <th className="py-3.5 px-4">Defect Units</th>
-                <th className="py-3.5 px-4">Customer Notes / Description</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-medium">
-              {filtered.map(d => {
-                const isCustomerReported =
-                  d.detectionStage === 'Customer Handover' ||
-                  Boolean(d.orderNumber) ||
-                  d.detectedBy.toLowerCase().includes('customer') ||
-                  d.detectedBy.toLowerCase().includes('anusha');
-
-                return (
-                  <tr key={d.id} className="hover:bg-slate-50/70 transition">
-                    {/* Case # & Origin */}
-                    <td className="py-3.5 px-4 align-top">
-                      <div className="font-mono font-extrabold text-slate-900">
-                        {d.discrepancyNumber}
-                      </div>
-                      <div className="mt-1">
-                        {isCustomerReported ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
-                            <User className="w-2.5 h-2.5" />
-                            Customer Report
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            <Building className="w-2.5 h-2.5" />
-                            In-Hub Dock Scan
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Order & Customer */}
-                    <td className="py-3.5 px-4 align-top">
-                      {d.orderNumber ? (
-                        <div className="font-mono font-bold text-slate-900 text-xs">
-                          {d.orderNumber}
-                        </div>
-                      ) : (
-                        <div className="font-mono text-slate-500 text-xs">
-                          {d.shipmentTracking}
-                        </div>
-                      )}
-                      <div className="text-[11px] text-slate-600 font-semibold mt-0.5 truncate max-w-[150px]">
-                        {d.customerName || 'BioMed Advanced Research'}
-                      </div>
-                    </td>
-
-                    {/* Deliverable & SKU */}
-                    <td className="py-3.5 px-4 align-top">
-                      <div className="font-bold text-slate-900 max-w-[170px] truncate">
-                        {d.productName || 'Diagnostic Supplies'}
-                      </div>
-                      <div className="text-[10px] font-mono text-indigo-600">
-                        {d.sku || 'SKU-UNKNOWN'}
-                      </div>
-                    </td>
-
-                    {/* Problem Category */}
-                    <td className="py-3.5 px-4 align-top">
-                      <div className="font-bold text-rose-700">
-                        {d.type}
-                      </div>
-                      <div className="mt-0.5">
-                        <StatusBadge status={d.severity} size="sm" />
-                      </div>
-                    </td>
-
-                    {/* Defect Units */}
-                    <td className="py-3.5 px-4 align-top font-mono">
-                      <span className="font-bold text-rose-600">
-                        {d.observedQuantity} Defective
-                      </span>
-                      <div className="text-[10px] text-slate-400">
-                        of {d.expectedQuantity} ordered
-                      </div>
-                    </td>
-
-                    {/* Customer Notes / Description */}
-                    <td className="py-3.5 px-4 align-top max-w-[200px]">
-                      <p className="text-xs text-slate-700 line-clamp-2 italic">
-                        {d.resolutionNotes || d.evidence?.[0]?.description || 'No additional note provided.'}
-                      </p>
-                      {d.preferredResolution && (
-                        <div className="text-[10px] font-bold text-indigo-700 mt-1">
-                          Requested: {d.preferredResolution}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Status */}
-                    <td className="py-3.5 px-4 align-top">
-                      <StatusBadge status={d.status} size="sm" />
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-3.5 px-4 align-top text-right">
-                      <button
-                        onClick={() => handleOpenInvestigate(d)}
-                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition cursor-pointer whitespace-nowrap"
-                      >
-                        Investigate
-                      </button>
-                    </td>
+          {/* Discrepancies Table (Image 3) */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs sm:text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4">Case #</th>
+                    <th className="py-3 px-4">Shipment</th>
+                    <th className="py-3 px-4">Product / SKU</th>
+                    <th className="py-3 px-4">Exception Type</th>
+                    <th className="py-3 px-4">Expected vs Observed</th>
+                    <th className="py-3 px-4">Severity</th>
+                    <th className="py-3 px-4">Resolution Status</th>
                   </tr>
-                );
-              })}
-
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    <Package className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                    <p className="font-bold text-slate-700 text-xs sm:text-sm">No exceptions matching filter</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">All customer deliveries and dock consignments reconciled.</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal: Investigate & Action Discrepancy (Vendor Workspace) */}
-      {selectedCase && (
-        <Modal
-          isOpen={investigateModalOpen}
-          onClose={() => setInvestigateModalOpen(false)}
-          title={`Exception Investigation: ${selectedCase.discrepancyNumber}`}
-          subtitle={`Reported for Order ${selectedCase.orderNumber || selectedCase.shipmentTracking} • Consignee: ${selectedCase.customerName}`}
-          maxWidth="2xl"
-        >
-          {actionSuccessMsg ? (
-            <div className="py-8 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-              <p className="font-bold text-slate-900 text-sm">{actionSuccessMsg}</p>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {filtered.map(d => {
+                    const isJustAdded = d.id === newlyCreatedCaseId;
+                    return (
+                      <tr
+                        key={d.id}
+                        className={`transition duration-300 ${
+                          isJustAdded
+                            ? 'bg-amber-50/80 border-l-4 border-l-amber-500'
+                            : 'hover:bg-slate-50/60'
+                        }`}
+                      >
+                        <td className="py-3 px-4 font-mono font-bold text-indigo-600">
+                          <div className="flex items-center gap-1.5">
+                            <span>{d.discrepancyNumber}</span>
+                            {isJustAdded && (
+                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 tracking-wider uppercase">
+                                New
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-700">
+                          {d.shipmentTracking}
+                        </td>
+                        <td className="py-3 px-4 font-bold text-slate-900">
+                          <div>{d.productName || 'Unspecified SKU'}</div>
+                          <div className="text-[10px] text-slate-400 font-normal">{d.sku}</div>
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-slate-800">
+                          {d.type}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="text-slate-500 font-normal">{d.expectedQuantity} exp</span>
+                          <span className="mx-1">/</span>
+                          <span className="font-bold text-rose-600">{d.observedQuantity} obs</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={d.severity} size="sm" />
+                        </td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={d.status} size="sm" />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ) : (
-            <form onSubmit={handleSaveInvestigation} className="space-y-4">
-              {/* Customer Filing Brief Card */}
-              <div className="p-4 bg-rose-50/60 rounded-2xl border border-rose-200 text-xs space-y-2.5">
-                <div className="flex items-center justify-between pb-2 border-b border-rose-200/60">
-                  <span className="font-extrabold text-rose-950 uppercase text-[10px] tracking-wider">
-                    Customer Problem Report Details
-                  </span>
-                  <span className="font-bold text-rose-700">
-                    {new Date(selectedCase.detectedAt).toLocaleDateString('en-IN', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </span>
-                </div>
+          </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Order Ref:</span>
-                    <span className="font-mono font-bold text-slate-900">{selectedCase.orderNumber || 'Direct'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Customer:</span>
-                    <span className="font-bold text-slate-900">{selectedCase.customerName}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Category:</span>
-                    <span className="font-bold text-rose-700">{selectedCase.type}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Defective Count:</span>
-                    <span className="font-mono font-bold text-rose-600">{selectedCase.observedQuantity} of {selectedCase.expectedQuantity}</span>
-                  </div>
-                </div>
-
-                <div className="pt-1">
-                  <span className="text-slate-400 block text-[10px]">Customer Observations & Notes:</span>
-                  <p className="font-semibold text-slate-800 text-xs mt-0.5 bg-white/80 p-2.5 rounded-xl border border-rose-100">
-                    {selectedCase.resolutionNotes || 'No description entered.'}
-                  </p>
-                </div>
-
-                {selectedCase.preferredResolution && (
-                  <div className="flex items-center gap-1.5 text-xs text-indigo-900 font-bold bg-indigo-50 p-2 rounded-xl border border-indigo-200">
-                    <span>Customer Preferred Resolution:</span>
-                    <span className="text-indigo-700">{selectedCase.preferredResolution}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Vendor Operational Actions Form */}
-              <div className="space-y-3 pt-2">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">
-                  Vendor Hub Handling & Quarantine Allocation
-                </h4>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Update Exception Status
-                    </label>
-                    <select
-                      value={targetStatus}
-                      onChange={e => setTargetStatus(e.target.value as DiscrepancyStatus)}
-                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="Under Review">Under Review</option>
-                      <option value="Evidence Collected">Evidence Collected (At Hub)</option>
-                      <option value="Resolution Proposed">Resolution Proposed (Replacement Prepared)</option>
-                      <option value="Resolved">Resolved (Handled & Closed)</option>
-                      <option value="Escalated">Escalated to Product Owner</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Assign Quarantine Isolation Bay
-                    </label>
-                    <input
-                      type="text"
-                      value={vendorQuarantineBay}
-                      onChange={e => setVendorQuarantineBay(e.target.value)}
-                      placeholder="e.g. Vendor Hub Quarantine Bay Q-4B"
-                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
+          {/* Modal: Report Shipment Exception / Damage (Image 2) */}
+          <Modal
+            isOpen={modalOpen}
+            onClose={() => setModalOpen(false)}
+            title="Report Shipment Exception / Damage"
+            subtitle="Submit photographic evidence and discrepancy logs to Product Owner."
+            maxWidth="lg"
+          >
+            <form onSubmit={handleReport} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Affected Shipment
+                  </label>
+                  <select
+                    value={selectedShipmentId}
+                    onChange={e => handleShipmentChange(e.target.value)}
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+                  >
+                    {shipments.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.trackingNumber} ({s.status})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Vendor Technician Inspection Note
+                    Product SKU
                   </label>
-                  <textarea
-                    rows={2}
-                    value={vendorNotes}
-                    onChange={e => setVendorNotes(e.target.value)}
-                    placeholder="Record technician inspection findings, physical box state, tamper seal status, and quarantine bin transfer..."
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  <select
+                    value={selectedProductId}
+                    onChange={e => handleProductChange(e.target.value)}
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+                  >
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.sku} — {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Discrepancy Type
+                  </label>
+                  <select
+                    value={type}
+                    onChange={e => setType(e.target.value as DiscrepancyType)}
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+                  >
+                    <option value="Damaged Goods">Damaged Goods (Cracked / Seal Broken)</option>
+                    <option value="Missing Item">Missing Item (Manifested but not scanned)</option>
+                    <option value="Unexpected Product">Unexpected Product (Barcode not on manifest)</option>
+                    <option value="Duplicate Scan">Duplicate Scan Attempt</option>
+                    <option value="Wrong Container">Wrong Container (Mismatched bin ID)</option>
+                    <option value="Quantity Mismatch">Quantity Mismatch</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Severity
+                  </label>
+                  <select
+                    value={severity}
+                    onChange={e => setSeverity(e.target.value as DiscrepancySeverity)}
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+                  >
+                    <option value="Low">Low (Informational)</option>
+                    <option value="Medium">Medium (Operational delay)</option>
+                    <option value="High">High (Missing high-value unit)</option>
+                    <option value="Critical">Critical (Immediate containment)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Expected Units
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={expectedQty}
+                    onChange={e => setExpectedQty(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Observed Physical Units
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={observedQty}
+                    onChange={e => setObservedQty(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
                   />
                 </div>
               </div>
 
-              {/* Modal Footer */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Inspection Evidence Notes
+                </label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Describe physical damage, broken seals, or packing bench context..."
+                  className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => {
-                    setInvestigateModalOpen(false);
-                    navigate('/vendor/returns');
-                  }}
-                  className="flex items-center gap-1.5 text-xs font-bold text-purple-700 hover:text-purple-900 cursor-pointer"
+                  onClick={() => setModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                 >
-                  <Warehouse className="w-3.5 h-3.5" />
-                  <span>Open Quarantine & Returns Bay →</span>
+                  Cancel
                 </button>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setInvestigateModalOpen(false)}
-                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition cursor-pointer"
-                  >
-                    Save & Update Status
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-xs transition cursor-pointer"
+                >
+                  Submit Discrepancy
+                </button>
               </div>
             </form>
-          )}
-        </Modal>
+          </Modal>
+        </div>
       )}
-
-      {/* Modal: Vendor Dock Exception Reporting */}
-      <Modal
-        isOpen={reportModalOpen}
-        onClose={() => setReportModalOpen(false)}
-        title="Report Shipment Exception / Damage"
-        subtitle="Submit photographic evidence and discrepancy logs to Product Owner."
-        maxWidth="lg"
-      >
-        <form onSubmit={handleCreateVendorReport} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Affected Shipment
-              </label>
-              <select
-                value={selectedShipmentId}
-                onChange={e => setSelectedShipmentId(e.target.value)}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
-              >
-                {shipments.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.trackingNumber} ({s.status})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Product SKU
-              </label>
-              <select
-                value={selectedProductId}
-                onChange={e => setSelectedProductId(e.target.value)}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
-              >
-                {products.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.sku} — {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Discrepancy Type
-              </label>
-              <select
-                value={type}
-                onChange={e => setType(e.target.value as DiscrepancyType)}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
-              >
-                <option value="Missing Item">Missing Item (Manifested but not scanned)</option>
-                <option value="Unexpected Product">Unexpected Product (Barcode not on manifest)</option>
-                <option value="Duplicate Scan">Duplicate Scan Attempt</option>
-                <option value="Wrong Container">Wrong Container (Mismatched bin ID)</option>
-                <option value="Damaged Goods">Damaged Goods (Cracked / Seal Broken)</option>
-                <option value="Quantity Mismatch">Quantity Mismatch</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Severity
-              </label>
-              <select
-                value={severity}
-                onChange={e => setSeverity(e.target.value as DiscrepancySeverity)}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
-              >
-                <option value="Low">Low (Informational)</option>
-                <option value="Medium">Medium (Operational delay)</option>
-                <option value="High">High (Missing high-value unit)</option>
-                <option value="Critical">Critical (Immediate containment)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Expected Units
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={expectedQty}
-                onChange={e => setExpectedQty(Number(e.target.value))}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Observed Physical Units
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={observedQty}
-                onChange={e => setObservedQty(Number(e.target.value))}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Inspection Evidence Notes
-            </label>
-            <textarea
-              rows={2}
-              required
-              value={reportNotes}
-              onChange={e => setReportNotes(e.target.value)}
-              placeholder="Describe physical damage, broken seals, or packing bench context..."
-              className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setReportModalOpen(false)}
-              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-xs transition cursor-pointer"
-            >
-              Submit Discrepancy
-            </button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 };

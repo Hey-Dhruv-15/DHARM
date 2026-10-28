@@ -24,7 +24,6 @@ import { VendorShipments } from '../features/vendor/VendorShipments';
 import { VendorDiscrepancies } from '../features/vendor/VendorDiscrepancies';
 import { VendorInventory } from '../features/vendor/VendorInventory';
 import { VendorOutgoing } from '../features/vendor/VendorOutgoing';
-import { VendorReturns } from '../features/vendor/VendorReturns';
 import { VendorSettings } from '../features/vendor/VendorSettings';
 
 // Customer Pages
@@ -98,9 +97,10 @@ export const AppRoutes: React.FC = () => {
           }
         />
         <Route path="/vendor/discrepancies" element={<VendorDiscrepancies />} />
+        <Route path="/vendor/customer-damaged" element={<Navigate to="/vendor/discrepancies" replace />} />
+        <Route path="/vendor/returns" element={<Navigate to="/vendor/discrepancies" replace />} />
         <Route path="/vendor/inventory" element={<VendorInventory />} />
         <Route path="/vendor/shipments/outgoing" element={<VendorOutgoing />} />
-        <Route path="/vendor/returns" element={<VendorReturns />} />
         <Route path="/vendor/settings" element={<VendorSettings />} />
       </Route>
 

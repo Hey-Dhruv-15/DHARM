@@ -63,17 +63,48 @@ export interface Product {
   createdAt: string;
 }
 
+export type ContainerType =
+  | 'Cold-Chain Bin'
+  | 'Security Crate'
+  | 'RFID Pallet'
+  | 'Heavy Duty Tote'
+  | 'Standard Container'
+  | 'Standard Parcel';
+
+export interface ContainerScannedItem {
+  id?: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  barcode: string;
+  quantity: number;
+  weightKg: number;
+  unitWeightKg: number;
+  scannedAt: string;
+}
+
 export interface Container {
   id: string;
   containerNumber: string;
-  type: 'Cold-Chain Bin' | 'Security Crate' | 'RFID Pallet' | 'Standard Parcel' | 'Heavy Duty Tote';
-  sealNumber: string;
-  status: 'Empty' | 'Assigned' | 'Sealed' | 'In Transit' | 'Unsealed';
+  type: ContainerType;
+  maxCapacity?: number;
+  capacityUnit?: 'kg' | 'lbs' | 'units';
   capacityKg: number;
   currentWeightKg: number;
-  itemCount: number;
-  assignedShipmentId?: string;
+  utilizedCapacity?: number;
+  sealNumber: string;
+  sealStatus?: 'Active' | 'Compromised' | 'Broken' | 'Verified';
+  initialLocation?: string;
   location: string;
+  description?: string;
+  status: 'Active' | 'Inactive' | 'Empty' | 'Assigned' | 'Sealed' | 'In Transit' | 'Unsealed';
+  assignedShipmentId?: string;
+  assignedShipmentTracking?: string;
+  itemCount: number;
+  items?: ContainerScannedItem[];
+  createdAt?: string;
+  createdBy?: string;
+  isActive?: boolean;
 }
 
 export interface ShipmentItem {
@@ -181,6 +212,8 @@ export interface ScanRecord {
   notes?: string;
 }
 
+export type CustomerResolutionChoice = 'Replace Product' | 'Refund Amount';
+
 export interface ReturnCase {
   id: string;
   returnNumber: string;
@@ -192,16 +225,24 @@ export interface ReturnCase {
   customerName: string;
   productId: string;
   productName: string;
+  sku?: string;
   quantity: number;
   reason: 'Damaged in Transit' | 'Incorrect Item Received' | 'Defective Unit' | 'Customer Cancellation';
   productCondition?: 'Unopened Original Packaging' | 'Damaged Exterior Seal' | 'Defective Internals' | 'Broken Seal';
-  status: 'Requested' | 'Pickup Scheduled' | 'Received at Hub' | 'Inspected' | 'Quarantined' | 'Replacement Dispatched' | 'Closed';
+  status: 'Requested' | 'Pickup Scheduled' | 'Received at Hub' | 'Inspected' | 'Quarantined' | 'Replacement Dispatched' | 'Refund Processed' | 'Closed';
   evidencePhotos: string[];
   inspectionNotes?: string;
   quarantineLocation?: string;
   replacementShipmentId?: string;
-  refundStatus?: 'Pending Inspection' | 'Processed to Account' | 'Not Applicable';
   resolutionDate?: string;
+  customerChoice?: CustomerResolutionChoice;
+  refundAmount?: number;
+  refundStatus?: 'Pending' | 'Processed' | 'Pending Inspection' | 'Processed to Account' | 'Not Applicable';
+  refundReference?: string;
+  vendorVerified?: boolean;
+  vendorVerifiedBy?: string;
+  vendorVerifiedAt?: string;
+  problemDiagnosis?: string;
   requestedAt: string;
   updatedAt: string;
 }

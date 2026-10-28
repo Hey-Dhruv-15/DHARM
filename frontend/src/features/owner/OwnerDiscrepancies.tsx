@@ -1,33 +1,173 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { Modal } from '../../components/common/Modal';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import {
-  AlertTriangle,
   CheckCircle2,
   FileText,
   Search,
-  Filter,
   Camera,
-  Layers,
-  ArrowRight,
-  ShieldAlert,
-  Clock,
   Sparkles,
-  UserCheck,
-  RotateCcw
+  Plus
 } from 'lucide-react';
-import type { DiscrepancyCase, DiscrepancyStatus, DiscrepancySeverity } from '../../types';
+import type { DiscrepancyCase, DiscrepancyStatus, DiscrepancySeverity, DiscrepancyType } from '../../types';
 
 export const OwnerDiscrepancies: React.FC = () => {
-  const { discrepancies, updateDiscrepancyStatus } = useData();
+  const { discrepancies, shipments, products, updateDiscrepancyStatus, reportDiscrepancy } = useData();
   const { user, role } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [severityFilter, setSeverityFilter] = useState<string>('ALL');
+  const [severityFilter, _setSeverityFilter] = useState<string>('ALL');
   const [selectedCase, setSelectedCase] = useState<DiscrepancyCase | null>(discrepancies[0] || null);
+  const [newlyCreatedCaseId, setNewlyCreatedCaseId] = useState<string | null>(null);
+  const [successBanner, setSuccessBanner] = useState<{ number: string; tracking: string } | null>(null);
+
+  // Report Exception Modal State
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [selectedShipmentId, setSelectedShipmentId] = useState(shipments[0]?.id || '');
+  const [selectedProductId, setSelectedProductId] = useState(products[0]?.id || '');
+  const [type, setType] = useState<DiscrepancyType>('Damaged Goods');
+  const [severity, setSeverity] = useState<DiscrepancySeverity>('Medium');
+  const [expectedQty, setExpectedQty] = useState(1);
+  const [observedQty, setObservedQty] = useState(0);
+  const [notes, setNotes] = useState('');
+
+  // Handle incoming routing from scanner (e.g., Report Damaged button in Image 1)
+  useEffect(() => {
+    const state = location.state as {
+      openReportModal?: boolean;
+      shipmentId?: string;
+      productId?: string;
+      sku?: string;
+      type?: DiscrepancyType;
+      severity?: DiscrepancySeverity;
+      expectedQty?: number;
+      observedQty?: number;
+      notes?: string;
+    } | null;
+
+    if (state?.openReportModal) {
+      if (state.shipmentId && shipments.some(s => s.id === state.shipmentId)) {
+        setSelectedShipmentId(state.shipmentId);
+      } else if (shipments.length > 0) {
+        setSelectedShipmentId(shipments[0].id);
+      }
+
+      if (state.productId && products.some(p => p.id === state.productId)) {
+        setSelectedProductId(state.productId);
+      } else if (state.sku) {
+        const found = products.find(p => p.sku === state.sku);
+        if (found) setSelectedProductId(found.id);
+      } else if (products.length > 0) {
+        setSelectedProductId(products[0].id);
+      }
+
+      if (state.type) {
+        setType(state.type);
+      } else {
+        setType('Damaged Goods');
+      }
+
+      if (state.severity) {
+        setSeverity(state.severity);
+      } else {
+        setSeverity('Medium');
+      }
+
+      if (typeof state.expectedQty === 'number') {
+        setExpectedQty(state.expectedQty);
+      } else {
+        setExpectedQty(1);
+      }
+
+      if (typeof state.observedQty === 'number') {
+        setObservedQty(state.observedQty);
+      } else {
+        setObservedQty(0);
+      }
+
+      if (typeof state.notes === 'string') {
+        setNotes(state.notes);
+      }
+
+      setReportModalOpen(true);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, shipments, products, navigate, location.pathname]);
+
+  const handleShipmentChange = (shipId: string) => {
+    setSelectedShipmentId(shipId);
+    const shp = shipments.find(s => s.id === shipId);
+    if (shp && shp.items.length > 0) {
+      const firstItem = shp.items[0];
+      const prod = products.find(p => p.id === firstItem.productId || p.sku === firstItem.sku);
+      if (prod) {
+        setSelectedProductId(prod.id);
+        setExpectedQty(firstItem.expectedQuantity);
+        setObservedQty(0);
+      }
+    }
+  };
+
+  const handleProductChange = (prodId: string) => {
+    setSelectedProductId(prodId);
+    const shp = shipments.find(s => s.id === selectedShipmentId);
+    const item = shp?.items.find(i => i.productId === prodId);
+    if (item) {
+      setExpectedQty(item.expectedQuantity);
+    }
+  };
+
+  const handleReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    const shipment = shipments.find(s => s.id === selectedShipmentId);
+    const product = products.find(p => p.id === selectedProductId);
+
+    const newCase = reportDiscrepancy(
+      {
+        shipmentId: selectedShipmentId,
+        shipmentTracking: shipment ? shipment.trackingNumber : 'TRK-UNKNOWN',
+        containerId: shipment?.containerIds[0] || 'cnt-01',
+        containerNumber: 'CNT-ALPHA-881',
+        productId: product?.id,
+        productName: product?.name,
+        sku: product?.sku,
+        type,
+        severity,
+        status: 'Detected',
+        expectedQuantity: Number(expectedQty),
+        observedQuantity: Number(observedQty),
+        detectionStage: 'Owner Packing',
+        detectedBy: `${user?.name || 'Dhruva'} (Owner)`,
+        evidence: [
+          {
+            id: `evd-${Date.now()}`,
+            type: 'Photo',
+            description: notes || 'Physical damage / packaging defect identified during verification scanning. Unit quarantined.',
+            timestamp: new Date().toISOString(),
+            uploadedBy: user?.name || 'Dhruva'
+          }
+        ],
+        resolutionNotes: 'Flagged during packing verification. Product quarantined from active batch.'
+      },
+      user?.name || 'Dhruva',
+      role || 'OWNER'
+    );
+
+    setSelectedCase(newCase);
+    setNewlyCreatedCaseId(newCase.id);
+    setSuccessBanner({
+      number: newCase.discrepancyNumber,
+      tracking: shipment ? shipment.trackingNumber : selectedShipmentId
+    });
+    setReportModalOpen(false);
+    setNotes('');
+  };
 
   // Resolution Modal State
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
@@ -104,7 +244,40 @@ export const OwnerDiscrepancies: React.FC = () => {
             Real-time reconciliation of expected vs verified quantities, photographic evidence collection, and resolution workflows.
           </p>
         </div>
+
+        <button
+          onClick={() => setReportModalOpen(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition cursor-pointer shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Report Exception</span>
+        </button>
       </div>
+
+      {/* Success Notification Banner when discrepancy added */}
+      {successBanner && (
+        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center justify-between gap-3 shadow-xs animate-in fade-in duration-300">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold">
+                Exception Case <span className="font-mono text-emerald-950 font-extrabold">{successBanner.number}</span> Successfully Logged!
+              </h4>
+              <p className="text-xs text-emerald-800 mt-0.5">
+                Damaged unit for shipment <span className="font-mono font-bold">{successBanner.tracking}</span> has been quarantined and recorded into the exceptions registry.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setSuccessBanner(null)}
+            className="text-emerald-700 hover:text-emerald-950 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200/80">
@@ -145,6 +318,7 @@ export const OwnerDiscrepancies: React.FC = () => {
         <div className="lg:col-span-5 space-y-3">
           {filtered.map(c => {
             const isSelected = selectedCase?.id === c.id;
+            const isJustAdded = c.id === newlyCreatedCaseId;
             return (
               <div
                 key={c.id}
@@ -152,6 +326,8 @@ export const OwnerDiscrepancies: React.FC = () => {
                 className={`p-4 rounded-2xl border transition-all cursor-pointer ${
                   isSelected
                     ? 'bg-indigo-50/50 border-indigo-400 shadow-sm'
+                    : isJustAdded
+                    ? 'bg-amber-50/80 border-amber-400 shadow-sm'
                     : 'bg-white border-slate-200/80 hover:border-slate-300'
                 }`}
               >
@@ -161,6 +337,11 @@ export const OwnerDiscrepancies: React.FC = () => {
                       <span className="font-mono text-xs font-bold text-slate-900">
                         {c.discrepancyNumber}
                       </span>
+                      {isJustAdded && (
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 tracking-wider uppercase">
+                          New
+                        </span>
+                      )}
                       <StatusBadge status={c.severity} size="sm" />
                     </div>
 
@@ -428,6 +609,146 @@ export const OwnerDiscrepancies: React.FC = () => {
           </form>
         </Modal>
       )}
+
+      {/* Modal: Report Shipment Exception / Damage (Image 2) */}
+      <Modal
+        isOpen={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        title="Report Shipment Exception / Damage"
+        subtitle="Submit photographic evidence and discrepancy logs to Product Owner."
+        maxWidth="lg"
+      >
+        <form onSubmit={handleReport} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Affected Shipment
+              </label>
+              <select
+                value={selectedShipmentId}
+                onChange={e => handleShipmentChange(e.target.value)}
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+              >
+                {shipments.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.trackingNumber} ({s.status})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Product SKU
+              </label>
+              <select
+                value={selectedProductId}
+                onChange={e => handleProductChange(e.target.value)}
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+              >
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.sku} — {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Discrepancy Type
+              </label>
+              <select
+                value={type}
+                onChange={e => setType(e.target.value as DiscrepancyType)}
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+              >
+                <option value="Damaged Goods">Damaged Goods (Cracked / Seal Broken)</option>
+                <option value="Missing Item">Missing Item (Manifested but not scanned)</option>
+                <option value="Unexpected Product">Unexpected Product (Barcode not on manifest)</option>
+                <option value="Duplicate Scan">Duplicate Scan Attempt</option>
+                <option value="Wrong Container">Wrong Container (Mismatched bin ID)</option>
+                <option value="Quantity Mismatch">Quantity Mismatch</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Severity
+              </label>
+              <select
+                value={severity}
+                onChange={e => setSeverity(e.target.value as DiscrepancySeverity)}
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+              >
+                <option value="Low">Low (Informational)</option>
+                <option value="Medium">Medium (Operational delay)</option>
+                <option value="High">High (Missing high-value unit)</option>
+                <option value="Critical">Critical (Immediate containment)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Expected Units
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={expectedQty}
+                onChange={e => setExpectedQty(Number(e.target.value))}
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Observed Physical Units
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={observedQty}
+                onChange={e => setObservedQty(Number(e.target.value))}
+                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Inspection Evidence Notes
+            </label>
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Describe physical damage, broken seals, or packing bench context..."
+              className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setReportModalOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-xs transition cursor-pointer"
+            >
+              Submit Discrepancy
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

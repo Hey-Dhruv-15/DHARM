@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Html5Qrcode } from 'html5-qrcode';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
+import { Modal } from '../common/Modal';
 import {
   Camera,
   CameraOff,
   Keyboard,
   CheckCircle2,
   AlertTriangle,
-  XCircle,
-  Copy,
   Zap,
   ShieldAlert,
-  ArrowRight
+  ArrowRight,
+  RotateCcw
 } from 'lucide-react';
 
 interface QrBarcodeScannerProps {
@@ -28,14 +29,13 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
   defaultContainerId,
   onFinishVerification
 }) => {
+  const navigate = useNavigate();
   const { user, role } = useAuth();
   const {
     shipments,
     containers,
     products,
-    processScan,
-    scanRecords,
-    reportDiscrepancy
+    processScan
   } = useData();
 
   // State
@@ -48,21 +48,23 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
   const [manualCode, setManualCode] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{
-    type: 'success' | 'warning' | 'error' | 'info';
+  const [cameraNotice, setCameraNotice] = useState<string | null>(null);
+  const [lastMatchedProductId, setLastMatchedProductId] = useState<string | null>(null);
+  const [completeModalOpen, setCompleteModalOpen] = useState(false);
+  const [scanAlert, setScanAlert] = useState<{
+    type: 'success' | 'error';
+    title: string;
     message: string;
+    code: string;
+    productName?: string;
   } | null>(null);
 
-  // Damage reporting modal state
-  const [damageModalOpen, setDamageModalOpen] = useState(false);
-  const [damagedItemSku, setDamagedItemSku] = useState('');
-  const [damageNotes, setDamageNotes] = useState('');
+  const manualInputRef = useRef<HTMLInputElement | null>(null);
 
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = 'qr-reader-container';
 
   const selectedShipment = shipments.find(s => s.id === selectedShipmentId);
-  const selectedContainer = containers.find(c => c.id === selectedContainerId);
 
   // Compute live verification progress
   const totalExpected = selectedShipment?.items.reduce((acc, i) => acc + i.expectedQuantity, 0) || 0;
@@ -81,9 +83,44 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
     };
   }, []);
 
+  const playScanAudio = (isSuccess: boolean) => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (isSuccess) {
+        // High two-tone success chime (880Hz -> 1175Hz)
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(1175, audioCtx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.25);
+      } else {
+        // Low alert buzz (260Hz -> 160Hz)
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(260, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(160, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+      }
+    } catch {
+      // Audio autoplay policy or not supported
+    }
+  };
+
   const startScanner = async () => {
     setCameraError(null);
-    setFeedback({ type: 'info', message: 'Requesting camera device access...' });
+    setCameraNotice('Requesting camera device access...');
 
     try {
       if (!html5QrCodeRef.current) {
@@ -113,17 +150,14 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
       );
 
       setIsScanning(true);
-      setFeedback({ type: 'success', message: 'Live camera active. Position barcode inside reticle.' });
+      setCameraNotice('Live camera active. Position barcode inside reticle.');
     } catch (err: any) {
       console.warn('Camera start error:', err);
       setIsScanning(false);
       setCameraError(
         err?.message || 'Unable to access camera. Please allow camera permissions or use manual entry below.'
       );
-      setFeedback({
-        type: 'warning',
-        message: 'Camera unavailable on this hardware. Use manual barcode input or one-click simulation buttons below.'
-      });
+      setCameraNotice('Camera unavailable on this hardware. Use manual barcode input or quick scenario simulators.');
     }
   };
 
@@ -132,7 +166,7 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
       try {
         await html5QrCodeRef.current.stop();
         setIsScanning(false);
-        setFeedback({ type: 'info', message: 'Camera stopped.' });
+        setCameraNotice('Camera standby mode.');
       } catch (err) {
         console.error('Stop scanner error:', err);
       }
@@ -142,8 +176,9 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
   const handleScannedCode = (code: string) => {
     if (!code || !code.trim()) return;
 
+    const cleanCode = code.trim();
     const res = processScan(
-      code.trim(),
+      cleanCode,
       selectedShipmentId,
       selectedContainerId,
       user?.name || 'Operator',
@@ -151,23 +186,42 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
     );
 
     if (res.valid) {
-      setFeedback({ type: 'success', message: res.message });
-      // Play a soft beep if audio is available
-      try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-        osc.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.1);
-      } catch {}
-    } else {
-      if (res.result === 'Duplicate Attempt') {
-        setFeedback({ type: 'warning', message: res.message });
-      } else {
-        setFeedback({ type: 'error', message: res.message });
+      const pName = res.matchedProduct?.name || res.matchedContainer?.containerNumber || cleanCode;
+      if (res.matchedProduct?.id) {
+        setLastMatchedProductId(res.matchedProduct.id);
       }
+      setScanAlert({
+        type: 'success',
+        title: 'Successfully matched the products!',
+        message: `Successfully matched ${pName} (${res.matchedProduct?.sku || cleanCode}) against shipment manifest.`,
+        productName: pName,
+        code: cleanCode
+      });
+      playScanAudio(true);
+    } else {
+      setLastMatchedProductId(null);
+      setScanAlert({
+        type: 'error',
+        title: 'Scan Failed — Please Scan Again',
+        message: res.message,
+        code: cleanCode
+      });
+      playScanAudio(false);
+    }
+  };
+
+  const handleProceedToNextScreen = () => {
+    setCompleteModalOpen(false);
+    if (onFinishVerification) {
+      onFinishVerification(selectedShipmentId);
+      return;
+    }
+    if (role === 'VENDOR') {
+      navigate('/vendor/shipments/outgoing');
+    } else if (role === 'OWNER') {
+      navigate('/owner/shipments');
+    } else {
+      navigate('/customer/shipments');
     }
   };
 
@@ -178,47 +232,52 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
     setManualCode('');
   };
 
-  const handleReportDamage = () => {
-    if (!damagedItemSku) return;
-    const targetProduct = products.find(p => p.sku === damagedItemSku || p.barcode === damagedItemSku);
+  const handleNavigateReportDamage = async () => {
+    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+      try {
+        await html5QrCodeRef.current.stop();
+      } catch (err) {
+        console.error('Stop scanner error:', err);
+      }
+    }
 
-    reportDiscrepancy(
-      {
-        shipmentId: selectedShipment?.id || '',
-        shipmentTracking: selectedShipment?.trackingNumber || 'UNASSIGNED',
-        containerId: selectedContainer?.id,
-        containerNumber: selectedContainer?.containerNumber,
-        productId: targetProduct?.id,
-        productName: targetProduct?.name || damagedItemSku,
-        sku: targetProduct?.sku || damagedItemSku,
-        type: 'Damaged Goods',
-        severity: 'High',
-        status: 'Detected',
-        expectedQuantity: 1,
-        observedQuantity: 0,
-        detectionStage: role === 'OWNER' ? 'Owner Packing' : 'Vendor Receiving',
-        detectedBy: `${user?.name} (${role} Scanner)`,
-        evidence: [
-          {
-            id: `evd-${Date.now()}`,
-            type: 'Inspection Report',
-            description: damageNotes || 'Physical damage identified during verification scanning.',
-            timestamp: new Date().toISOString(),
-            uploadedBy: user?.name || 'Operator'
-          }
-        ],
-        resolutionNotes: 'Flagged by scanner operator. Product quarantined.',
-        resolutionOutcome: 'Pending'
-      },
-      user?.name || 'Operator',
-      role || 'VENDOR'
-    );
+    let targetProductId = lastMatchedProductId;
+    let targetSku = '';
+    let targetQty = 1;
 
-    setDamageModalOpen(false);
-    setDamageNotes('');
-    setFeedback({
-      type: 'warning',
-      message: `🚨 Damage reported for ${damagedItemSku}. Product flagged in Discrepancy Engine.`
+    if (targetProductId) {
+      const prod = products.find(p => p.id === targetProductId);
+      targetSku = prod?.sku || '';
+      const manifestItem = selectedShipment?.items.find(
+        i => i.productId === targetProductId || i.sku === prod?.sku
+      );
+      if (manifestItem) {
+        targetQty = manifestItem.expectedQuantity;
+      }
+    } else if (selectedShipment?.items && selectedShipment.items.length > 0) {
+      const firstItem = selectedShipment.items[0];
+      targetProductId = firstItem.productId;
+      targetSku = firstItem.sku;
+      targetQty = firstItem.expectedQuantity;
+    } else if (products.length > 0) {
+      targetProductId = products[0].id;
+      targetSku = products[0].sku;
+    }
+
+    const targetRoute = role === 'OWNER' ? '/owner/discrepancies' : '/vendor/discrepancies';
+
+    navigate(targetRoute, {
+      state: {
+        openReportModal: true,
+        shipmentId: selectedShipmentId,
+        productId: targetProductId,
+        sku: targetSku,
+        type: 'Damaged Goods' as const,
+        severity: 'Medium' as const,
+        expectedQty: targetQty,
+        observedQty: 0,
+        notes: ''
+      }
     });
   };
 
@@ -312,8 +371,31 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
             </div>
 
             {/* Camera Viewport Canvas */}
-            <div className="relative w-full aspect-video sm:h-72 bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800">
+            <div
+              className={`relative w-full aspect-video sm:h-72 bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border-2 transition-all ${
+                scanAlert?.type === 'success'
+                  ? 'border-emerald-500 shadow-md shadow-emerald-500/20'
+                  : scanAlert?.type === 'error'
+                  ? 'border-rose-500 shadow-md shadow-rose-500/20 ring-2 ring-rose-500/20'
+                  : 'border-slate-800'
+              }`}
+            >
               <div id={scannerContainerId} className="w-full h-full" />
+
+              {/* In-viewport Live HUD Status Badge */}
+              {scanAlert?.type === 'success' && (
+                <div className="absolute top-3 right-3 bg-emerald-600 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg border border-emerald-400 z-10 animate-in fade-in duration-150">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-100" />
+                  <span>Successfully matched the products!</span>
+                </div>
+              )}
+
+              {scanAlert?.type === 'error' && (
+                <div className="absolute top-3 right-3 bg-rose-600 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg border border-rose-400 z-10 animate-in fade-in duration-150">
+                  <AlertTriangle className="w-4 h-4 text-rose-100" />
+                  <span>Scan Failed — Please Scan Again</span>
+                </div>
+              )}
 
               {!isScanning && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-slate-400 bg-slate-900/95">
@@ -333,24 +415,109 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
               )}
             </div>
 
-            {/* Realtime Feedback Banner */}
-            {feedback && (
+            {/* Realtime Feedback Banner: Scanned Successfully / Scan Again */}
+            {scanAlert && (
               <div
-                className={`mt-4 p-3 rounded-xl border text-xs font-medium flex items-start gap-2.5 transition-all ${
-                  feedback.type === 'success'
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                    : feedback.type === 'warning'
-                    ? 'bg-amber-50 border-amber-200 text-amber-800'
-                    : feedback.type === 'error'
-                    ? 'bg-red-50 border-red-200 text-red-800'
-                    : 'bg-indigo-50 border-indigo-200 text-indigo-800'
+                className={`mt-4 p-4 rounded-2xl border transition-all ${
+                  scanAlert.type === 'success'
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-950 ring-2 ring-emerald-500/20'
+                    : 'bg-rose-50 border-rose-300 text-rose-950 ring-2 ring-rose-500/20'
                 }`}
               >
-                {feedback.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />}
-                {feedback.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />}
-                {feedback.type === 'error' && <XCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />}
-                {feedback.type === 'info' && <Zap className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />}
-                <span>{feedback.message}</span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                        scanAlert.type === 'success'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-rose-600 text-white shadow-xs'
+                      }`}
+                    >
+                      {scanAlert.type === 'success' ? (
+                        <CheckCircle2 className="w-5 h-5" />
+                      ) : (
+                        <AlertTriangle className="w-5 h-5" />
+                      )}
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-extrabold tracking-tight">
+                          {scanAlert.title}
+                        </h4>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                            scanAlert.type === 'success'
+                              ? 'bg-emerald-200 text-emerald-900'
+                              : 'bg-rose-200 text-rose-900'
+                          }`}
+                        >
+                          {scanAlert.type === 'success' ? 'Verified' : 'Please Scan Again'}
+                        </span>
+                      </div>
+
+                      <p className="text-xs mt-1 font-medium text-slate-700">
+                        {scanAlert.message}
+                      </p>
+
+                      {scanAlert.productName && (
+                        <p className="text-[11px] text-emerald-700 font-semibold mt-0.5">
+                          Product: {scanAlert.productName}
+                        </p>
+                      )}
+
+                      {scanAlert.type === 'error' && (
+                        <p className="text-[11px] text-rose-700 font-medium mt-1">
+                          Barcode <span className="font-mono font-bold">"{scanAlert.code}"</span> was not recognized or has an issue. Please realign the label and scan again.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleNavigateReportDamage}
+                      className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <span>Report Damaged</span>
+                    </button>
+                    {scanAlert.type === 'error' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setScanAlert(null);
+                          setManualCode('');
+                          manualInputRef.current?.focus();
+                        }}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Scan Again</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setScanAlert(null);
+                          setManualCode('');
+                          manualInputRef.current?.focus();
+                        }}
+                        className="px-3.5 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-xl text-xs font-bold transition cursor-pointer"
+                      >
+                        Dismiss
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!scanAlert && cameraNotice && (
+              <div className="mt-4 p-3 rounded-xl border border-indigo-200 bg-indigo-50/70 text-indigo-800 text-xs font-medium flex items-center gap-2">
+                <Zap className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>{cameraNotice}</span>
               </div>
             )}
 
@@ -359,6 +526,7 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
               <div className="relative flex-1">
                 <Keyboard className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
+                  ref={manualInputRef}
                   type="text"
                   value={manualCode}
                   onChange={e => setManualCode(e.target.value)}
@@ -373,75 +541,6 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
                 Scan Code
               </button>
             </form>
-
-            {/* Quick Testing Shortcuts (Pre-configured sample scenarios for instant evaluation) */}
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
-                <span>Quick Scenario Simulators</span>
-                <span className="text-[10px] text-slate-400 font-normal">Click to trigger event</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleScannedCode('BC-901-CRYO-8821')}
-                  className="p-2 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-semibold text-left transition"
-                  title="Scan Expected Item"
-                >
-                  <div className="flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    <span>Expected Item</span>
-                  </div>
-                  <div className="text-[9.5px] text-emerald-600 font-mono mt-0.5 truncate">
-                    BC-901-CRYO-8821
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleScannedCode('BC-901-CRYO-8821')}
-                  className="p-2 rounded-xl border border-amber-200 bg-amber-50/50 hover:bg-amber-100 text-amber-800 text-[11px] font-semibold text-left transition"
-                  title="Simulate Duplicate Scan Attempt"
-                >
-                  <div className="flex items-center gap-1">
-                    <Copy className="w-3 h-3 text-amber-600" />
-                    <span>Duplicate Scan</span>
-                  </div>
-                  <div className="text-[9.5px] text-amber-600 font-mono mt-0.5 truncate">
-                    Rapid 2nd scan
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleScannedCode('BC-UNKNOWN-9999')}
-                  className="p-2 rounded-xl border border-red-200 bg-red-50/50 hover:bg-red-100 text-red-800 text-[11px] font-semibold text-left transition"
-                  title="Simulate Unknown Barcode"
-                >
-                  <div className="flex items-center gap-1">
-                    <XCircle className="w-3 h-3 text-red-600" />
-                    <span>Unknown Code</span>
-                  </div>
-                  <div className="text-[9.5px] text-red-600 font-mono mt-0.5 truncate">
-                    BC-UNKNOWN-9999
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleScannedCode('CNT-ALPHA-881')}
-                  className="p-2 rounded-xl border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-800 text-[11px] font-semibold text-left transition"
-                  title="Scan Container QR"
-                >
-                  <div className="flex items-center gap-1">
-                    <Zap className="w-3 h-3 text-indigo-600" />
-                    <span>Container QR</span>
-                  </div>
-                  <div className="text-[9.5px] text-indigo-600 font-mono mt-0.5 truncate">
-                    CNT-ALPHA-881
-                  </div>
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* Damage & Exception Reporting CTA */}
@@ -460,7 +559,8 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
               </div>
             </div>
             <button
-              onClick={() => setDamageModalOpen(true)}
+              type="button"
+              onClick={handleNavigateReportDamage}
               className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs transition shrink-0 cursor-pointer"
             >
               Report Damaged
@@ -494,158 +594,130 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
               <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 Expected Manifest Items
               </div>
-              {selectedShipment?.items.map(item => (
-                <div
-                  key={item.productId}
-                  className="p-3 rounded-xl border border-slate-100 bg-slate-50/60 flex items-center justify-between text-xs"
-                >
-                  <div className="max-w-[65%]">
-                    <div className="font-bold text-slate-800 truncate">
-                      {item.productName}
+              {selectedShipment?.items.map(item => {
+                const isJustMatched = item.productId === lastMatchedProductId || item.sku === lastMatchedProductId;
+                const isComplete = (item.verifiedQuantity || 0) >= item.expectedQuantity;
+
+                return (
+                  <div
+                    key={item.productId}
+                    className={`p-3 rounded-xl border transition-all duration-300 flex items-center justify-between text-xs ${
+                      isJustMatched
+                        ? 'ring-2 ring-emerald-500 bg-emerald-50/90 border-emerald-300 shadow-sm scale-[1.01]'
+                        : isComplete
+                        ? 'bg-emerald-50/40 border-emerald-100'
+                        : 'border-slate-100 bg-slate-50/60'
+                    }`}
+                  >
+                    <div className="max-w-[65%] space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-slate-800 truncate">
+                          {item.productName}
+                        </span>
+                        {isJustMatched && (
+                          <span className="inline-flex items-center gap-1 text-[9.5px] font-extrabold text-emerald-800 bg-emerald-200/90 px-1.5 py-0.5 rounded-md animate-pulse">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                            Matched!
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono">
+                        SKU: {item.sku}
+                      </div>
                     </div>
-                    <div className="text-[10px] text-slate-400 font-mono">
-                      SKU: {item.sku}
+
+                    <div className="text-right space-y-1">
+                      <div className="font-extrabold text-slate-900 font-mono text-xs">
+                        {item.verifiedQuantity || 0} / {item.expectedQuantity}
+                      </div>
+                      <span
+                        className={`text-[9.5px] font-bold px-2 py-0.5 rounded-md inline-block ${
+                          isComplete
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {isComplete ? 'Complete ✓' : 'Pending'}
+                      </span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="font-extrabold text-slate-900 font-mono">
-                      {item.verifiedQuantity || 0} / {item.expectedQuantity}
-                    </div>
-                    <span
-                      className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-md ${
-                        item.verifiedQuantity >= item.expectedQuantity
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-amber-100 text-amber-700'
-                      }`}
-                    >
-                      {item.verifiedQuantity >= item.expectedQuantity ? 'Complete' : 'Pending'}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Finish Verification Action */}
-            <div className="mt-5 pt-4 border-t border-slate-100">
+            <div className="mt-5 pt-4 border-t border-slate-100 space-y-2">
               <button
-                onClick={() => {
-                  if (onFinishVerification) {
-                    onFinishVerification(selectedShipmentId);
-                  } else {
-                    alert('Shipment verification completed and logged to audit trail.');
-                  }
-                }}
-                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={() => setCompleteModalOpen(true)}
+                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <span>Confirm & Finish Verification</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
-
-          {/* Recent Scan History Feed */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5">
-            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-              Live Scan Activity Stream
-            </h4>
-            <div className="space-y-2 max-h-56 overflow-y-auto">
-              {scanRecords.slice(0, 6).map(r => (
-                <div
-                  key={r.id}
-                  className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-[11px]"
-                >
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    {r.result === 'Expected Match' && (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    )}
-                    {r.result === 'Duplicate Attempt' && (
-                      <Copy className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    )}
-                    {(r.result === 'Unexpected Product' || r.result === 'Wrong Container') && (
-                      <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                    )}
-                    <div className="overflow-hidden">
-                      <div className="font-mono font-bold text-slate-800 truncate">
-                        {r.scannedCode}
-                      </div>
-                      <div className="text-[10px] text-slate-400">
-                        {r.result} • {new Date(r.scannedAt).toLocaleTimeString()}
-                      </div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-medium">
-                    {r.role}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Damaged Item Reporting Modal */}
-      {damageModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 text-red-600" />
-              <span>Flag Damaged / Compromised Item</span>
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">
-              Create an exception case in the Discrepancy Engine and quarantine the unit immediately.
-            </p>
 
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Product / SKU
-                </label>
-                <select
-                  value={damagedItemSku}
-                  onChange={e => setDamagedItemSku(e.target.value)}
-                  className="w-full text-xs p-2 rounded-xl border border-slate-200"
-                >
-                  <option value="">Select product...</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.sku}>
-                      {p.name} ({p.sku})
-                    </option>
-                  ))}
-                </select>
-              </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Inspection Notes & Defect Description
-                </label>
-                <textarea
-                  rows={3}
-                  value={damageNotes}
-                  onChange={e => setDamageNotes(e.target.value)}
-                  placeholder="E.g., Broken seal, liquid leak, fractured outer shell..."
-                  className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                />
-              </div>
+      {/* Success Modal: Successfully Matched the Products */}
+      <Modal
+        isOpen={completeModalOpen}
+        onClose={() => setCompleteModalOpen(false)}
+        title="Successfully Matched the Products!"
+        subtitle={`Shipment ${selectedShipment?.trackingNumber || ''} reconciliation complete.`}
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+              <CheckCircle2 className="w-6 h-6" />
             </div>
-
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button
-                onClick={() => setDamageModalOpen(false)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReportDamage}
-                disabled={!damagedItemSku}
-                className="px-4 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50"
-              >
-                Submit Discrepancy & Quarantine
-              </button>
+            <div>
+              <h4 className="text-sm font-bold text-emerald-950">
+                Successfully Matched the Products!
+              </h4>
+              <p className="text-xs text-emerald-800 mt-1">
+                All physical line items match the manifest specifications with {matchRate}% accuracy. Verified units have been recorded and reconciled against immutable chain custody.
+              </p>
             </div>
           </div>
+
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+              <span>Verified Quantity:</span>
+              <span className="font-bold font-mono text-slate-900">{totalVerified} / {totalExpected} units</span>
+            </div>
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+              <span>Shipment Tracking:</span>
+              <span className="font-mono text-indigo-700">{selectedShipment?.trackingNumber}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+              <span>Destination:</span>
+              <span className="text-slate-800">{selectedShipment?.customerName}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setCompleteModalOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+            >
+              Continue Scanning
+            </button>
+            <button
+              type="button"
+              onClick={handleProceedToNextScreen}
+              className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>Proceed to Next Screen</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

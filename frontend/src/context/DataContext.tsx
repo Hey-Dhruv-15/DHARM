@@ -2,9 +2,11 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type {
   Product,
   Container,
+  ContainerType,
   Shipment,
   DiscrepancyCase,
   ReturnCase,
+  CustomerResolutionChoice,
   AuditEvent,
   ScanRecord,
   DiscrepancyStatus,
@@ -60,8 +62,12 @@ interface DataContextType {
   addProduct: (product: Omit<Product, 'id' | 'createdAt'>, actorName: string, role: UserRole) => Product;
   updateProduct: (id: string, updates: Partial<Product>, actorName: string, role: UserRole) => void;
   deleteProduct: (id: string, actorName: string, role: UserRole) => void;
-  createContainer: (container: Omit<Container, 'id' | 'status' | 'currentWeightKg' | 'itemCount'>, actorName: string, role: UserRole) => Container;
+  createContainer: (container: Partial<Container> & { containerNumber: string; type: ContainerType; sealNumber: string }, actorName: string, role: UserRole) => Container;
+  updateContainer: (id: string, updates: Partial<Container>, actorName?: string, role?: UserRole) => void;
+  toggleContainerStatus: (id: string, actorName?: string, role?: UserRole) => void;
+  deleteContainer: (id: string, actorName?: string, role?: UserRole) => void;
   createShipment: (shipmentData: Partial<Shipment>, actorName: string, role: UserRole) => Shipment;
+  updateShipment: (id: string, updates: Partial<Shipment>, actorName?: string, role?: UserRole) => void;
   dispatchShipment: (shipmentId: string, actorName: string, role: UserRole) => boolean;
   receiveShipment: (shipmentId: string, actorName: string, role: UserRole) => boolean;
   processScan: (
@@ -76,6 +82,14 @@ interface DataContextType {
   confirmCustomerDelivery: (shipmentId: string, actorName: string, notes: string) => void;
   createReturnRequest: (returnData: Omit<ReturnCase, 'id' | 'returnNumber' | 'status' | 'requestedAt' | 'updatedAt'>, actorName: string) => ReturnCase;
   updateReturnStatus: (id: string, status: ReturnCase['status'], inspectionNotes?: string, quarantineLoc?: string, actorName?: string) => void;
+  setCustomerReturnChoice: (id: string, choice: CustomerResolutionChoice, actorName?: string) => void;
+  inspectAndVerifyReturn: (id: string, diagnosis: string, notes: string, quarantineLoc: string, actorName?: string) => void;
+  processReturnResolution: (
+    id: string,
+    resolution: CustomerResolutionChoice,
+    details?: { replacementShipmentTracking?: string; refundReference?: string; refundAmount?: number },
+    actorName?: string
+  ) => void;
   resetDemoData: () => void;
 
   // Customer Portal Actions
@@ -136,33 +150,77 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [containers, setContainers] = useState<Container[]>(() => {
-    const s = localStorage.getItem('dharm_containers');
-    return s ? JSON.parse(s) : INITIAL_CONTAINERS;
+    const s = localStorage.getItem('dharm_containers_v7');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_CONTAINERS.length) return parsed;
+      } catch {}
+    }
+    localStorage.removeItem('dharm_containers');
+    return INITIAL_CONTAINERS;
   });
 
   const [shipments, setShipments] = useState<Shipment[]>(() => {
-    const s = localStorage.getItem('dharm_shipments');
-    return s ? JSON.parse(s) : INITIAL_SHIPMENTS;
+    const s = localStorage.getItem('dharm_shipments_v7');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_SHIPMENTS.length) return parsed;
+      } catch {}
+    }
+    localStorage.removeItem('dharm_shipments');
+    return INITIAL_SHIPMENTS;
   });
 
   const [discrepancies, setDiscrepancies] = useState<DiscrepancyCase[]>(() => {
-    const s = localStorage.getItem('dharm_discrepancies');
-    return s ? JSON.parse(s) : INITIAL_DISCREPANCIES;
+    const s = localStorage.getItem('dharm_discrepancies_v7');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_DISCREPANCIES.length) return parsed;
+      } catch {}
+    }
+    localStorage.removeItem('dharm_discrepancies');
+    return INITIAL_DISCREPANCIES;
   });
 
   const [returns, setReturns] = useState<ReturnCase[]>(() => {
-    const s = localStorage.getItem('dharm_returns');
-    return s ? JSON.parse(s) : INITIAL_RETURNS;
+    const s = localStorage.getItem('dharm_returns_v7');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_RETURNS.length) return parsed;
+      } catch {}
+    }
+    localStorage.removeItem('dharm_returns_v6');
+    localStorage.removeItem('dharm_returns_v3');
+    localStorage.removeItem('dharm_returns');
+    return INITIAL_RETURNS;
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditEvent[]>(() => {
-    const s = localStorage.getItem('dharm_audit');
-    return s ? JSON.parse(s) : INITIAL_AUDIT_LOGS;
+    const s = localStorage.getItem('dharm_audit_v7');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_AUDIT_LOGS.length) return parsed;
+      } catch {}
+    }
+    localStorage.removeItem('dharm_audit');
+    return INITIAL_AUDIT_LOGS;
   });
 
   const [scanRecords, setScanRecords] = useState<ScanRecord[]>(() => {
-    const s = localStorage.getItem('dharm_scans');
-    return s ? JSON.parse(s) : INITIAL_SCAN_RECORDS;
+    const s = localStorage.getItem('dharm_scans_v7');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_SCAN_RECORDS.length) return parsed;
+      } catch {}
+    }
+    localStorage.removeItem('dharm_scans');
+    return INITIAL_SCAN_RECORDS;
   });
 
   const [orders, setOrders] = useState<Order[]>(() => {
@@ -212,21 +270,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('dharm_products', JSON.stringify(products));
   }, [products]);
   useEffect(() => {
+    localStorage.setItem('dharm_containers_v7', JSON.stringify(containers));
     localStorage.setItem('dharm_containers', JSON.stringify(containers));
   }, [containers]);
   useEffect(() => {
+    localStorage.setItem('dharm_shipments_v7', JSON.stringify(shipments));
     localStorage.setItem('dharm_shipments', JSON.stringify(shipments));
   }, [shipments]);
   useEffect(() => {
+    localStorage.setItem('dharm_discrepancies_v7', JSON.stringify(discrepancies));
     localStorage.setItem('dharm_discrepancies', JSON.stringify(discrepancies));
   }, [discrepancies]);
   useEffect(() => {
+    localStorage.setItem('dharm_returns_v7', JSON.stringify(returns));
     localStorage.setItem('dharm_returns', JSON.stringify(returns));
   }, [returns]);
   useEffect(() => {
+    localStorage.setItem('dharm_audit_v7', JSON.stringify(auditLogs));
     localStorage.setItem('dharm_audit', JSON.stringify(auditLogs));
   }, [auditLogs]);
   useEffect(() => {
+    localStorage.setItem('dharm_scans_v7', JSON.stringify(scanRecords));
     localStorage.setItem('dharm_scans', JSON.stringify(scanRecords));
   }, [scanRecords]);
 
@@ -288,20 +352,94 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const createContainer = (
-    data: Omit<Container, 'id' | 'status' | 'currentWeightKg' | 'itemCount'>,
+    data: Partial<Container> & { containerNumber: string; type: ContainerType; sealNumber: string },
     actorName: string,
     role: UserRole
   ): Container => {
+    const items = data.items || [];
+    const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+    const weight = items.reduce((sum, item) => sum + item.weightKg, 0);
+    const maxCap = Number(data.maxCapacity || data.capacityKg || 150);
+    const capUnit = data.capacityUnit || 'kg';
+
     const newCont: Container = {
-      ...data,
-      id: `cnt-${Date.now()}`,
-      status: 'Empty',
-      currentWeightKg: 0,
-      itemCount: 0
+      id: `cnt-${Math.floor(100 + Math.random() * 900)}`,
+      containerNumber: data.containerNumber,
+      type: data.type,
+      maxCapacity: maxCap,
+      capacityUnit: capUnit,
+      capacityKg: maxCap,
+      currentWeightKg: weight,
+      utilizedCapacity: weight,
+      sealNumber: data.sealNumber,
+      sealStatus: 'Active',
+      initialLocation: data.initialLocation || data.location || 'Central Warehouse Bay 4',
+      location: data.location || data.initialLocation || 'Central Warehouse Bay 4',
+      description: data.description || '',
+      status: data.status || 'Active',
+      assignedShipmentId: data.assignedShipmentId || undefined,
+      assignedShipmentTracking: data.assignedShipmentTracking || 'Unassigned',
+      itemCount: itemCount,
+      items: items,
+      createdAt: new Date().toISOString(),
+      createdBy: actorName,
+      isActive: true
     };
     setContainers(prev => [newCont, ...prev]);
     logAudit(actorName, role, 'CONTAINER_CREATED', 'Container', newCont.id, `Created container ${newCont.containerNumber} (${newCont.type}) with seal ${newCont.sealNumber}`);
     return newCont;
+  };
+
+  const updateContainer = (
+    id: string,
+    updates: Partial<Container>,
+    actorName?: string,
+    role?: UserRole
+  ) => {
+    setContainers(prev =>
+      prev.map(c => {
+        if (c.id !== id) return c;
+        const updated = { ...c, ...updates };
+        if (updates.items) {
+          updated.itemCount = updates.items.reduce((sum, i) => sum + i.quantity, 0);
+          updated.currentWeightKg = updates.items.reduce((sum, i) => sum + i.weightKg, 0);
+          updated.utilizedCapacity = updated.currentWeightKg;
+        }
+        return updated;
+      })
+    );
+    if (actorName) {
+      logAudit(actorName, role || 'OWNER', 'CONTAINER_UPDATED', 'Container', id, `Updated container ID: ${id}`);
+    }
+  };
+
+  const toggleContainerStatus = (
+    id: string,
+    actorName?: string,
+    role?: UserRole
+  ) => {
+    setContainers(prev =>
+      prev.map(c => {
+        if (c.id !== id) return c;
+        const newActive = !c.isActive;
+        const newStatus = newActive ? 'Active' : 'Inactive';
+        return { ...c, isActive: newActive, status: newStatus as any };
+      })
+    );
+    if (actorName) {
+      logAudit(actorName, role || 'OWNER', 'CONTAINER_STATUS_TOGGLED', 'Container', id, `Toggled active state for container ${id}`);
+    }
+  };
+
+  const deleteContainer = (
+    id: string,
+    actorName?: string,
+    role?: UserRole
+  ) => {
+    setContainers(prev => prev.filter(c => c.id !== id));
+    if (actorName) {
+      logAudit(actorName, role || 'OWNER', 'CONTAINER_DELETED', 'Container', id, `Deleted container ID: ${id}`);
+    }
   };
 
   const createShipment = (
@@ -343,6 +481,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setShipments(prev => [newShip, ...prev]);
     logAudit(actorName, role, 'SHIPMENT_CREATED', 'Shipment', newShip.id, `Created manifest for tracking ${newShip.trackingNumber} with ${newShip.items.length} product lines`);
     return newShip;
+  };
+
+  const updateShipment = (
+    id: string,
+    updates: Partial<Shipment>,
+    actorName?: string,
+    role?: UserRole
+  ) => {
+    setShipments(prev =>
+      prev.map(s => {
+        if (s.id !== id) return s;
+        return {
+          ...s,
+          ...updates,
+          events: updates.events || s.events
+        };
+      })
+    );
+    if (actorName) {
+      logAudit(actorName, role || 'OWNER', 'SHIPMENT_UPDATED', 'Shipment', id, `Updated shipment ID: ${id}`);
+    }
   };
 
   const dispatchShipment = (shipmentId: string, actorName: string, role: UserRole): boolean => {
@@ -1068,6 +1227,94 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  const setCustomerReturnChoice = (
+    id: string,
+    choice: CustomerResolutionChoice,
+    actorName: string = 'Customer'
+  ) => {
+    const now = new Date().toISOString();
+    setReturns(prev =>
+      prev.map(r => {
+        if (r.id === id) {
+          return {
+            ...r,
+            customerChoice: choice,
+            updatedAt: now
+          };
+        }
+        return r;
+      })
+    );
+    logAudit(actorName, 'CUSTOMER', 'RESOLUTION_CHOICE_SET', 'Return', id, `Customer designated resolution preference: ${choice}`);
+  };
+
+  const inspectAndVerifyReturn = (
+    id: string,
+    diagnosis: string,
+    notes: string,
+    quarantineLoc: string,
+    actorName: string = 'Sinu Gunshetty'
+  ) => {
+    const now = new Date().toISOString();
+    setReturns(prev =>
+      prev.map(r => {
+        if (r.id === id) {
+          return {
+            ...r,
+            status: 'Inspected',
+            vendorVerified: true,
+            vendorVerifiedBy: actorName,
+            vendorVerifiedAt: now,
+            problemDiagnosis: diagnosis,
+            inspectionNotes: notes,
+            quarantineLocation: quarantineLoc,
+            updatedAt: now
+          };
+        }
+        return r;
+      })
+    );
+    logAudit(actorName, 'VENDOR', 'RETURN_INSPECTED', 'Return', id, `Vendor verified defect for return ${id}: ${diagnosis}. Quarantined at ${quarantineLoc}`);
+  };
+
+  const processReturnResolution = (
+    id: string,
+    resolution: CustomerResolutionChoice,
+    details?: { replacementShipmentTracking?: string; refundReference?: string; refundAmount?: number },
+    actorName: string = 'Sinu Gunshetty'
+  ) => {
+    const now = new Date().toISOString();
+    setReturns(prev =>
+      prev.map(r => {
+        if (r.id === id) {
+          if (resolution === 'Replace Product') {
+            const tracking = details?.replacementShipmentTracking || `TRK-REP-${Math.floor(10000 + Math.random() * 90000)}`;
+            return {
+              ...r,
+              status: 'Replacement Dispatched',
+              customerChoice: 'Replace Product',
+              replacementShipmentId: tracking,
+              updatedAt: now
+            };
+          } else {
+            const ref = details?.refundReference || `RFND-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+            return {
+              ...r,
+              status: 'Refund Processed',
+              customerChoice: 'Refund Amount',
+              refundStatus: 'Processed',
+              refundReference: ref,
+              refundAmount: details?.refundAmount || r.refundAmount || 14500,
+              updatedAt: now
+            };
+          }
+        }
+        return r;
+      })
+    );
+    logAudit(actorName, 'VENDOR', 'RETURN_RESOLVED', 'Return', id, `Processed customer resolution choice (${resolution}) for return ${id}`);
+  };
+
   const resetDemoData = () => {
     setProducts(INITIAL_PRODUCTS);
     setContainers(INITIAL_CONTAINERS);
@@ -1093,7 +1340,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateProduct,
         deleteProduct,
         createContainer,
+        updateContainer,
+        toggleContainerStatus,
+        deleteContainer,
         createShipment,
+        updateShipment,
         dispatchShipment,
         receiveShipment,
         processScan,
@@ -1102,7 +1353,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         confirmCustomerDelivery,
         createReturnRequest,
         updateReturnStatus,
-        resetDemoData,
         orders,
         customerProfile,
         notifications,
@@ -1117,7 +1367,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         verifyCustomerProduct,
         submitCustomerDiscrepancy,
         markNotificationAsRead,
-        markAllNotificationsAsRead
+        markAllNotificationsAsRead,
+        setCustomerReturnChoice,
+        inspectAndVerifyReturn,
+        processReturnResolution,
+        resetDemoData
       }}
     >
       {children}

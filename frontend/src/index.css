@@ -26,3 +26,15 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+@keyframes laserSweep {
+  0% { top: 0%; opacity: 0.8; }
+  50% { top: 98%; opacity: 1; }
+  100% { top: 0%; opacity: 0.8; }
+}
+
+.animate-laser-sweep {
+  position: absolute;
+  animation: laserSweep 2.2s ease-in-out infinite;
+}
+

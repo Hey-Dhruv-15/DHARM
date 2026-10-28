@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type {
   Product,
   Container,
+  ContainerType,
   Shipment,
   DiscrepancyCase,
   ReturnCase,
@@ -43,8 +44,12 @@ interface DataContextType {
   addProduct: (product: Omit<Product, 'id' | 'createdAt'>, actorName: string, role: UserRole) => Product;
   updateProduct: (id: string, updates: Partial<Product>, actorName: string, role: UserRole) => void;
   deleteProduct: (id: string, actorName: string, role: UserRole) => void;
-  createContainer: (container: Omit<Container, 'id' | 'status' | 'currentWeightKg' | 'itemCount'>, actorName: string, role: UserRole) => Container;
+  createContainer: (container: Partial<Container> & { containerNumber: string; type: ContainerType; sealNumber: string }, actorName: string, role: UserRole) => Container;
+  updateContainer: (id: string, updates: Partial<Container>, actorName?: string, role?: UserRole) => void;
+  toggleContainerStatus: (id: string, actorName?: string, role?: UserRole) => void;
+  deleteContainer: (id: string, actorName?: string, role?: UserRole) => void;
   createShipment: (shipmentData: Partial<Shipment>, actorName: string, role: UserRole) => Shipment;
+  updateShipment: (id: string, updates: Partial<Shipment>, actorName?: string, role?: UserRole) => void;
   dispatchShipment: (shipmentId: string, actorName: string, role: UserRole) => boolean;
   receiveShipment: (shipmentId: string, actorName: string, role: UserRole) => boolean;
   processScan: (
@@ -194,20 +199,94 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const createContainer = (
-    data: Omit<Container, 'id' | 'status' | 'currentWeightKg' | 'itemCount'>,
+    data: Partial<Container> & { containerNumber: string; type: ContainerType; sealNumber: string },
     actorName: string,
     role: UserRole
   ): Container => {
+    const items = data.items || [];
+    const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+    const weight = items.reduce((sum, item) => sum + item.weightKg, 0);
+    const maxCap = Number(data.maxCapacity || data.capacityKg || 150);
+    const capUnit = data.capacityUnit || 'kg';
+
     const newCont: Container = {
-      ...data,
-      id: `cnt-${Date.now()}`,
-      status: 'Empty',
-      currentWeightKg: 0,
-      itemCount: 0
+      id: `cnt-${Math.floor(100 + Math.random() * 900)}`,
+      containerNumber: data.containerNumber,
+      type: data.type,
+      maxCapacity: maxCap,
+      capacityUnit: capUnit,
+      capacityKg: maxCap,
+      currentWeightKg: weight,
+      utilizedCapacity: weight,
+      sealNumber: data.sealNumber,
+      sealStatus: 'Active',
+      initialLocation: data.initialLocation || data.location || 'Central Warehouse Bay 4',
+      location: data.location || data.initialLocation || 'Central Warehouse Bay 4',
+      description: data.description || '',
+      status: data.status || 'Active',
+      assignedShipmentId: data.assignedShipmentId || undefined,
+      assignedShipmentTracking: data.assignedShipmentTracking || 'Unassigned',
+      itemCount: itemCount,
+      items: items,
+      createdAt: new Date().toISOString(),
+      createdBy: actorName,
+      isActive: true
     };
     setContainers(prev => [newCont, ...prev]);
     logAudit(actorName, role, 'CONTAINER_CREATED', 'Container', newCont.id, `Created container ${newCont.containerNumber} (${newCont.type}) with seal ${newCont.sealNumber}`);
     return newCont;
+  };
+
+  const updateContainer = (
+    id: string,
+    updates: Partial<Container>,
+    actorName?: string,
+    role?: UserRole
+  ) => {
+    setContainers(prev =>
+      prev.map(c => {
+        if (c.id !== id) return c;
+        const updated = { ...c, ...updates };
+        if (updates.items) {
+          updated.itemCount = updates.items.reduce((sum, i) => sum + i.quantity, 0);
+          updated.currentWeightKg = updates.items.reduce((sum, i) => sum + i.weightKg, 0);
+          updated.utilizedCapacity = updated.currentWeightKg;
+        }
+        return updated;
+      })
+    );
+    if (actorName) {
+      logAudit(actorName, role || 'OWNER', 'CONTAINER_UPDATED', 'Container', id, `Updated container ID: ${id}`);
+    }
+  };
+
+  const toggleContainerStatus = (
+    id: string,
+    actorName?: string,
+    role?: UserRole
+  ) => {
+    setContainers(prev =>
+      prev.map(c => {
+        if (c.id !== id) return c;
+        const newActive = !c.isActive;
+        const newStatus = newActive ? 'Active' : 'Inactive';
+        return { ...c, isActive: newActive, status: newStatus as any };
+      })
+    );
+    if (actorName) {
+      logAudit(actorName, role || 'OWNER', 'CONTAINER_STATUS_TOGGLED', 'Container', id, `Toggled active state for container ${id}`);
+    }
+  };
+
+  const deleteContainer = (
+    id: string,
+    actorName?: string,
+    role?: UserRole
+  ) => {
+    setContainers(prev => prev.filter(c => c.id !== id));
+    if (actorName) {
+      logAudit(actorName, role || 'OWNER', 'CONTAINER_DELETED', 'Container', id, `Deleted container ID: ${id}`);
+    }
   };
 
   const createShipment = (
@@ -249,6 +328,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setShipments(prev => [newShip, ...prev]);
     logAudit(actorName, role, 'SHIPMENT_CREATED', 'Shipment', newShip.id, `Created manifest for tracking ${newShip.trackingNumber} with ${newShip.items.length} product lines`);
     return newShip;
+  };
+
+  const updateShipment = (
+    id: string,
+    updates: Partial<Shipment>,
+    actorName?: string,
+    role?: UserRole
+  ) => {
+    setShipments(prev =>
+      prev.map(s => {
+        if (s.id !== id) return s;
+        return {
+          ...s,
+          ...updates,
+          events: updates.events || s.events
+        };
+      })
+    );
+    if (actorName) {
+      logAudit(actorName, role || 'OWNER', 'SHIPMENT_UPDATED', 'Shipment', id, `Updated shipment ID: ${id}`);
+    }
   };
 
   const dispatchShipment = (shipmentId: string, actorName: string, role: UserRole): boolean => {
@@ -681,7 +781,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateProduct,
         deleteProduct,
         createContainer,
+        updateContainer,
+        toggleContainerStatus,
+        deleteContainer,
         createShipment,
+        updateShipment,
         dispatchShipment,
         receiveShipment,
         processScan,

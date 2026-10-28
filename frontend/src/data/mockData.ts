@@ -404,48 +404,134 @@ export const INITIAL_CONTAINERS: Container[] = [
     id: 'cnt-01',
     containerNumber: 'CNT-ALPHA-881',
     type: 'Cold-Chain Bin',
-    sealNumber: 'SEAL-SEC-99014',
-    status: 'In Transit',
+    maxCapacity: 150,
+    capacityUnit: 'kg',
     capacityKg: 150,
     currentWeightKg: 84.5,
+    utilizedCapacity: 84.5,
+    sealNumber: 'SEAL-SEC-99014',
+    sealStatus: 'Active',
+    status: 'In Transit',
     itemCount: 24,
     assignedShipmentId: 'shp-2026-001',
-    location: 'In Transit -> Midwest Hub 4'
+    assignedShipmentTracking: 'TRK-DMH-884920',
+    initialLocation: 'Central Warehouse Bay 4',
+    location: 'In Transit → Midwest Hub 4',
+    description: 'Precision cold-chain insulated bin with active GPS telemetry and tamper seal.',
+    createdAt: '2026-10-20T08:00:00Z',
+    createdBy: 'Dhruva (Owner)',
+    isActive: true,
+    items: [
+      {
+        productId: 'prod-apl-01',
+        productName: 'Apple',
+        sku: 'AI-APL-001',
+        barcode: 'BC-APL-001',
+        quantity: 10,
+        weightKg: 35.0,
+        unitWeightKg: 3.5,
+        scannedAt: '2026-10-20T08:15:00Z'
+      },
+      {
+        productId: 'prod-sec-01',
+        productName: 'Enterprise Security Suite',
+        sku: 'SEC-SHIELD-ENT',
+        barcode: 'BC-SEC-001',
+        quantity: 14,
+        weightKg: 49.5,
+        unitWeightKg: 3.535,
+        scannedAt: '2026-10-20T08:22:00Z'
+      }
+    ]
   },
   {
     id: 'cnt-02',
     containerNumber: 'CNT-SEC-409',
     type: 'Security Crate',
-    sealNumber: 'SEAL-SEC-88120',
-    status: 'In Transit',
+    maxCapacity: 200,
+    capacityUnit: 'kg',
     capacityKg: 200,
     currentWeightKg: 112.0,
+    utilizedCapacity: 112.0,
+    sealNumber: 'SEAL-SEC-88120',
+    sealStatus: 'Active',
+    status: 'In Transit',
     itemCount: 16,
     assignedShipmentId: 'shp-2026-001',
-    location: 'In Transit -> Midwest Hub 4'
+    assignedShipmentTracking: 'TRK-DMH-884920',
+    initialLocation: 'Midwest Sorting & Cross-Dock Hub 4',
+    location: 'In Transit → Midwest Hub 4',
+    description: 'Reinforced ballistic alloy secure transport crate.',
+    createdAt: '2026-10-21T09:30:00Z',
+    createdBy: 'Dhruva (Owner)',
+    isActive: true,
+    items: [
+      {
+        productId: 'prod-mkt-01',
+        productName: 'Agamin Marketing Automation Pro',
+        sku: 'SAAS-MKT-101',
+        barcode: 'BC-MKT-101',
+        quantity: 16,
+        weightKg: 112.0,
+        unitWeightKg: 7.0,
+        scannedAt: '2026-10-21T09:45:00Z'
+      }
+    ]
   },
   {
     id: 'cnt-03',
     containerNumber: 'CNT-PAL-102',
     type: 'RFID Pallet',
-    sealNumber: 'SEAL-RFID-77192',
-    status: 'Assigned',
+    maxCapacity: 800,
+    capacityUnit: 'kg',
     capacityKg: 800,
     currentWeightKg: 420.0,
+    utilizedCapacity: 420.0,
+    sealNumber: 'SEAL-RFID-77192',
+    sealStatus: 'Active',
+    status: 'Assigned',
     itemCount: 50,
     assignedShipmentId: 'shp-2026-002',
-    location: 'Owner Central Bay 4'
+    assignedShipmentTracking: 'TRK-DMH-904122',
+    initialLocation: 'Central Warehouse Bay 4',
+    location: 'Owner Central Bay 4',
+    description: 'RFID-enabled industrial freight pallet with perimeter seal.',
+    createdAt: '2026-10-22T11:00:00Z',
+    createdBy: 'Dhruva (Owner)',
+    isActive: true,
+    items: [
+      {
+        productId: 'prod-efe-01',
+        productName: 'efefef',
+        sku: 'AI-DAT-003',
+        barcode: 'BC-DAT-003',
+        quantity: 50,
+        weightKg: 420.0,
+        unitWeightKg: 8.4,
+        scannedAt: '2026-10-22T11:20:00Z'
+      }
+    ]
   },
   {
     id: 'cnt-04',
     containerNumber: 'CNT-TOTE-55',
     type: 'Heavy Duty Tote',
-    sealNumber: 'SEAL-TOTE-3301',
-    status: 'Empty',
+    maxCapacity: 100,
+    capacityUnit: 'kg',
     capacityKg: 100,
     currentWeightKg: 0,
+    utilizedCapacity: 0,
+    sealNumber: 'SEAL-TOTE-3301',
+    sealStatus: 'Active',
+    status: 'Active',
     itemCount: 0,
-    location: 'Owner Depot Storage'
+    initialLocation: 'Central Warehouse Bay 4',
+    location: 'Owner Depot Storage',
+    description: 'Stackable high-density polyethylene tote.',
+    createdAt: '2026-10-23T14:15:00Z',
+    createdBy: 'Dhruva (Owner)',
+    isActive: true,
+    items: []
   }
 ];
 

@@ -2,199 +2,707 @@ import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { Modal } from '../../components/common/Modal';
-import { StatusBadge } from '../../components/common/StatusBadge';
+import { OpenCvBarcodeScanner } from '../../components/scanner/OpenCvBarcodeScanner';
 import {
   Archive,
   Plus,
   Shield,
-  Weight,
   Lock,
-  Unlock,
   Truck,
   Copy,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  MoreVertical,
+  Eye,
+  Edit2,
+  Ban,
+  Trash2,
+  Package,
+  Layers,
+  Sparkles,
+  Info,
+  X,
+  Search,
+  Filter,
+  Scan
 } from 'lucide-react';
-import type { Container } from '../../types';
+import type { Container, ContainerType, Product, ContainerScannedItem } from '../../types';
+
+const WAREHOUSE_LOCATIONS = [
+  'Central Warehouse Bay 4',
+  'Apex Central Depot (Hub Alpha)',
+  'Central Distribution Center, Hub Alpha',
+  'Midwest Sorting & Cross-Dock Hub 4',
+  'BioMed Research Campus Bay 2',
+  'South Distribution Center Bay 8',
+  'East Coast Logistics Hub'
+];
+
+const CONTAINER_TYPES: ContainerType[] = [
+  'Cold-Chain Bin',
+  'Security Crate',
+  'RFID Pallet',
+  'Heavy Duty Tote',
+  'Standard Container'
+];
+
+interface ScannedProductItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  barcode: string;
+  quantity: number;
+  unitWeight: number;
+  totalWeight: number;
+}
 
 export const OwnerContainers: React.FC = () => {
-  const { containers, createContainer, shipments } = useData();
+  const { containers, createContainer, updateContainer, toggleContainerStatus, shipments, products } = useData();
   const { user, role } = useAuth();
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [containerNumber, setContainerNumber] = useState('');
-  const [type, setType] = useState<Container['type']>('Cold-Chain Bin');
-  const [sealNumber, setSealNumber] = useState('');
-  const [capacityKg, setCapacityKg] = useState(150);
-  const [location, setLocation] = useState('Central Warehouse Bay 4');
+  // Search & Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('ALL');
 
-  const handleAutoFill = () => {
-    const num = Math.floor(100 + Math.random() * 900);
-    const prefix = type === 'Cold-Chain Bin' ? 'ALPHA' : type === 'RFID Pallet' ? 'PAL' : 'SEC';
-    setContainerNumber(`CNT-${prefix}-${num}`);
-    setSealNumber(`SEAL-TAMPER-${Math.floor(10000 + Math.random() * 90000)}`);
+  // Modals state
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [detailsModalContainer, setDetailsModalContainer] = useState<Container | null>(null);
+  const [editModalContainer, setEditModalContainer] = useState<Container | null>(null);
+
+  // Dedicated Scan Products Action Modal state (triggered from 3-dots card menu)
+  const [scanModalContainer, setScanModalContainer] = useState<Container | null>(null);
+  const [containerScanItems, setContainerScanItems] = useState<ContainerScannedItem[]>([]);
+  const [liveScannedCode, setLiveScannedCode] = useState<string | null>(null);
+  const [liveScannedItemInfo, setLiveScannedItemInfo] = useState<{
+    name: string;
+    sku: string;
+    weight: number;
+    barcode: string;
+  } | null>(null);
+  const [containerScanError, setContainerScanError] = useState<string | null>(null);
+  const [isContainerScanning, setIsContainerScanning] = useState<boolean>(false);
+
+  // Dropdown menu state for cards
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
+  // 1. Container Information Form State
+  const [containerNumber, setContainerNumber] = useState('');
+  const [containerType, setContainerType] = useState<ContainerType>('Cold-Chain Bin');
+  const [maxCapacity, setMaxCapacity] = useState<number>(150);
+  const [capacityUnit, setCapacityUnit] = useState<'kg' | 'lbs' | 'units'>('kg');
+  const [sealNumber, setSealNumber] = useState('');
+  const [initialLocation, setInitialLocation] = useState(WAREHOUSE_LOCATIONS[0]);
+  const [description, setDescription] = useState('');
+
+  // 2. Scan Products State
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannedItems, setScannedItems] = useState<ScannedProductItem[]>([]);
+  const [capacityError, setCapacityError] = useState<string | null>(null);
+
+  // Helper for generating standard unit weights for catalog products
+  const getProductUnitWeight = (product: Product): number => {
+    if (product.sku.includes('CRYO')) return 3.5;
+    if (product.sku.includes('SENS')) return 1.2;
+    if (product.sku.includes('BIO')) return 0.8;
+    if (product.sku.includes('FILT')) return 1.5;
+    if (product.sku.includes('GATE')) return 4.0;
+    if (product.sku.includes('SEC')) return 2.5;
+    if (product.sku.includes('APL')) return 3.5;
+    if (product.sku.includes('MKT')) return 2.0;
+    return 2.5; // standard fallback 2.5 kg/unit
   };
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!containerNumber || !sealNumber) {
-      alert('Please provide container number and seal number.');
+  // Products available for testing scanner
+  const simulationProducts = products.slice(0, 8).map(p => ({
+    name: p.name,
+    sku: p.sku,
+    barcode: p.barcode,
+    weightKg: getProductUnitWeight(p)
+  }));
+
+  // Auto-generate container number & seal
+  const handleAutoFill = () => {
+    const num = Math.floor(100 + Math.random() * 900);
+    const prefix =
+      containerType === 'Cold-Chain Bin'
+        ? 'ALPHA'
+        : containerType === 'Security Crate'
+        ? 'SEC'
+        : containerType === 'RFID Pallet'
+        ? 'PAL'
+        : containerType === 'Heavy Duty Tote'
+        ? 'TOTE'
+        : 'STD';
+    setContainerNumber(`CNT-${prefix}-${num}`);
+    setSealNumber(`SEAL-SEC-${Math.floor(10000 + Math.random() * 90000)}`);
+  };
+
+  // Open Create Modal
+  const openCreateModal = () => {
+    handleAutoFill();
+    setScannedItems([]);
+    setCapacityError(null);
+    setIsScanning(false);
+    setDescription('');
+    setMaxCapacity(150);
+    setCapacityUnit('kg');
+    setCreateModalOpen(true);
+  };
+
+  // Dynamic calculations for Scanned Products
+  const currentUtilizedCapacity = scannedItems.reduce((acc, i) => acc + i.totalWeight, 0);
+  const currentTotalUnits = scannedItems.reduce((acc, i) => acc + i.quantity, 0);
+  const utilizedPercent =
+    maxCapacity > 0 ? Math.min(100, Math.round((currentUtilizedCapacity / Number(maxCapacity)) * 100)) : 0;
+
+  // Real-time Barcode Scan Handler with Capacity Validation & Automatic Quantity Updates
+  const handleBarcodeScan = (barcode: string): boolean => {
+    const cleanCode = barcode.trim().toUpperCase();
+
+    // Match exact catalog product, or select a product from the catalog for the scanned barcode
+    const exactProduct = products.find(
+      p =>
+        p.barcode.trim().toUpperCase() === cleanCode ||
+        p.sku.trim().toUpperCase() === cleanCode
+    );
+
+    const selectedProduct = exactProduct || (products.length > 0
+      ? products[Math.abs(cleanCode.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % products.length]
+      : null);
+
+    const productId = selectedProduct ? `prod-${selectedProduct.id}-${cleanCode.slice(-4)}` : `prod-${cleanCode}`;
+    const productName = selectedProduct ? selectedProduct.name : `Scanned Product (${cleanCode})`;
+    const productSku = selectedProduct ? selectedProduct.sku : `SKU-${cleanCode.slice(0, 8)}`;
+    const unitWeight = selectedProduct ? getProductUnitWeight(selectedProduct) : 2.0;
+
+    // CAPACITY VALIDATION before accepting each scan!
+    if (currentUtilizedCapacity + unitWeight > Number(maxCapacity)) {
+      setCapacityError(
+        `⚠️ Capacity limit exceeded! Cannot add "${productName}" (+${unitWeight} ${capacityUnit}). Max capacity is ${maxCapacity} ${capacityUnit} (Current: ${currentUtilizedCapacity.toFixed(1)} ${capacityUnit}).`
+      );
+      return false;
+    }
+
+    // Capacity validated, clear any prior error
+    setCapacityError(null);
+
+    // Automatic quantity updates when the same barcode is scanned again
+    setScannedItems(prev => {
+      const existingIdx = prev.findIndex(item => item.productId === productId);
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        const existing = updated[existingIdx];
+        const newQty = existing.quantity + 1;
+        updated[existingIdx] = {
+          ...existing,
+          quantity: newQty,
+          totalWeight: Number((newQty * existing.unitWeight).toFixed(2))
+        };
+        return updated;
+      } else {
+        return [
+          ...prev,
+          {
+            productId: productId,
+            productName: productName,
+            sku: productSku,
+            barcode: cleanCode,
+            quantity: 1,
+            unitWeight: unitWeight,
+            totalWeight: unitWeight
+          }
+        ];
+      }
+    });
+
+    return true;
+  };
+
+  // Remove product from scanned list ("remove in UI please :>")
+  const handleRemoveScannedItem = (productId: string) => {
+    setScannedItems(prev => prev.filter(item => item.productId !== productId));
+    setCapacityError(null);
+  };
+
+  // Adjust quantity manually in Scanned Products List
+  const handleAdjustQuantity = (productId: string, delta: number) => {
+    const item = scannedItems.find(i => i.productId === productId);
+    if (!item) return;
+
+    if (delta > 0) {
+      // Check capacity before incrementing
+      if (currentUtilizedCapacity + item.unitWeight > Number(maxCapacity)) {
+        setCapacityError(
+          `⚠️ Capacity limit exceeded! Cannot add another unit of "${item.productName}". Max capacity is ${maxCapacity} ${capacityUnit}.`
+        );
+        return;
+      }
+    }
+
+    setCapacityError(null);
+    setScannedItems(prev =>
+      prev
+        .map(i => {
+          if (i.productId !== productId) return i;
+          const newQty = i.quantity + delta;
+          if (newQty <= 0) return null;
+          return {
+            ...i,
+            quantity: newQty,
+            totalWeight: Number((newQty * i.unitWeight).toFixed(2))
+          };
+        })
+        .filter(Boolean) as ScannedProductItem[]
+    );
+  };
+
+  // Open dedicated Scan Products modal for a specific container from the 3-dots menu
+  const openScanModalForContainer = (c: Container) => {
+    setScanModalContainer(c);
+    setContainerScanItems(c.items ? [...c.items] : []);
+    setLiveScannedCode(null);
+    setLiveScannedItemInfo(null);
+    setContainerScanError(null);
+    setIsContainerScanning(false);
+  };
+
+  // Real-time Barcode Scan Handler for existing container (accepts real physical barcodes)
+  const handleContainerBarcodeScan = (barcode: string): boolean => {
+    if (!scanModalContainer) return false;
+    const cleanCode = barcode.trim().toUpperCase();
+
+    // Match exact catalog product, or select a product from the catalog for the scanned barcode
+    const exactProduct = products.find(
+      p =>
+        p.barcode.trim().toUpperCase() === cleanCode ||
+        p.sku.trim().toUpperCase() === cleanCode
+    );
+
+    const selectedProduct = exactProduct || (products.length > 0
+      ? products[Math.abs(cleanCode.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % products.length]
+      : null);
+
+    const productId = selectedProduct ? `prod-${selectedProduct.id}-${cleanCode.slice(-4)}` : `prod-${cleanCode}`;
+    const productName = selectedProduct ? selectedProduct.name : `Scanned Product (${cleanCode})`;
+    const productSku = selectedProduct ? selectedProduct.sku : `SKU-${cleanCode.slice(0, 8)}`;
+    const unitWeight = selectedProduct ? getProductUnitWeight(selectedProduct) : 2.0;
+
+    // Display the scanned real barcode value directly on screen!
+    setLiveScannedCode(cleanCode);
+    setLiveScannedItemInfo({
+      name: productName,
+      sku: productSku,
+      weight: unitWeight,
+      barcode: cleanCode
+    });
+
+    const maxCap = scanModalContainer.maxCapacity || scanModalContainer.capacityKg || 150;
+    const currentUtilized = containerScanItems.reduce((acc, i) => acc + (i.weightKg || i.unitWeightKg * i.quantity), 0);
+
+    // Capacity validation before accepting scan!
+    if (currentUtilized + unitWeight > maxCap) {
+      setContainerScanError(
+        `⚠️ Capacity limit exceeded! Cannot add "${productName}" (+${unitWeight} ${scanModalContainer.capacityUnit || 'kg'}). Maximum container capacity is ${maxCap} ${scanModalContainer.capacityUnit || 'kg'} (Currently at ${currentUtilized.toFixed(1)}).`
+      );
+      return false;
+    }
+
+    setContainerScanError(null);
+
+    let updatedItems: ContainerScannedItem[] = [];
+    const existingIndex = containerScanItems.findIndex(i => i.productId === productId);
+
+    if (existingIndex >= 0) {
+      updatedItems = containerScanItems.map((item, idx) => {
+        if (idx !== existingIndex) return item;
+        const newQty = item.quantity + 1;
+        return {
+          ...item,
+          quantity: newQty,
+          weightKg: Number((newQty * item.unitWeightKg).toFixed(2))
+        };
+      });
+    } else {
+      updatedItems = [
+        ...containerScanItems,
+        {
+          productId: productId,
+          productName: productName,
+          sku: productSku,
+          barcode: cleanCode,
+          quantity: 1,
+          unitWeightKg: unitWeight,
+          weightKg: unitWeight,
+          scannedAt: new Date().toISOString()
+        }
+      ];
+    }
+
+    setContainerScanItems(updatedItems);
+
+    // Automatically update container in DataContext
+    updateContainer(
+      scanModalContainer.id,
+      { items: updatedItems },
+      user?.name || 'Dhruva (Owner)',
+      role || undefined
+    );
+
+    return true;
+  };
+
+  // Remove product from container in UI ("remove in UI please :>")
+  const handleRemoveContainerItem = (productId: string) => {
+    if (!scanModalContainer) return;
+    const updated = containerScanItems.filter(i => i.productId !== productId);
+    setContainerScanItems(updated);
+    setContainerScanError(null);
+    updateContainer(
+      scanModalContainer.id,
+      { items: updated },
+      user?.name || 'Dhruva (Owner)',
+      role || undefined
+    );
+  };
+
+  // Adjust quantity manually in container Scan Products modal
+  const handleAdjustContainerItemQty = (productId: string, delta: number) => {
+    if (!scanModalContainer) return;
+    const maxCap = scanModalContainer.maxCapacity || scanModalContainer.capacityKg || 150;
+    const item = containerScanItems.find(i => i.productId === productId);
+    if (!item) return;
+
+    const currentUtilized = containerScanItems.reduce((acc, i) => acc + (i.weightKg || i.unitWeightKg * i.quantity), 0);
+
+    if (delta > 0 && currentUtilized + item.unitWeightKg > maxCap) {
+      setContainerScanError(
+        `⚠️ Capacity limit exceeded! Cannot add another unit of "${item.productName}". Maximum capacity is ${maxCap} ${scanModalContainer.capacityUnit || 'kg'}.`
+      );
       return;
     }
+
+    setContainerScanError(null);
+    const updated = containerScanItems
+      .map(i => {
+        if (i.productId !== productId) return i;
+        const newQty = i.quantity + delta;
+        if (newQty <= 0) return null;
+        return {
+          ...i,
+          quantity: newQty,
+          weightKg: Number((newQty * i.unitWeightKg).toFixed(2))
+        };
+      })
+      .filter(Boolean) as ContainerScannedItem[];
+
+    setContainerScanItems(updated);
+    updateContainer(
+      scanModalContainer.id,
+      { items: updated },
+      user?.name || 'Dhruva (Owner)',
+      role || undefined
+    );
+  };
+
+  // Form Submit: Create Container
+  const handleCreateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!containerNumber.trim()) {
+      alert('Please provide a unique Container Number.');
+      return;
+    }
+    if (!sealNumber.trim()) {
+      alert('Please provide a Tamper-Evident Seal Number.');
+      return;
+    }
+
+    // Verify Container Number uniqueness
+    const exists = containers.some(
+      c => c.containerNumber.toUpperCase() === containerNumber.trim().toUpperCase()
+    );
+    if (exists) {
+      alert(`Container Number "${containerNumber}" already exists. Please use a unique number.`);
+      return;
+    }
+
+    // Build items payload
+    const itemsPayload = scannedItems.map(item => ({
+      productId: item.productId,
+      productName: item.productName,
+      sku: item.sku,
+      barcode: item.barcode,
+      quantity: item.quantity,
+      unitWeightKg: item.unitWeight,
+      weightKg: item.totalWeight,
+      scannedAt: new Date().toISOString()
+    }));
 
     createContainer(
       {
         containerNumber: containerNumber.trim().toUpperCase(),
-        type,
+        type: containerType,
+        maxCapacity: Number(maxCapacity),
+        capacityUnit,
+        capacityKg: Number(maxCapacity),
+        currentWeightKg: currentUtilizedCapacity,
+        utilizedCapacity: currentUtilizedCapacity,
         sealNumber: sealNumber.trim().toUpperCase(),
-        capacityKg: Number(capacityKg),
-        location
+        initialLocation,
+        location: initialLocation,
+        description: description.trim(),
+        status: 'Active',
+        assignedShipmentTracking: 'Unassigned',
+        itemCount: currentTotalUnits,
+        items: itemsPayload
       },
       user?.name || 'Dhruva (Owner)',
       role || 'OWNER'
     );
 
-    setModalOpen(false);
-    setContainerNumber('');
-    setSealNumber('');
+    setCreateModalOpen(false);
   };
+
+  // Filtered containers
+  const filteredContainers = containers.filter(c => {
+    const matchesSearch =
+      c.containerNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.sealNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.assignedShipmentTracking && c.assignedShipmentTracking.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const matchesType = typeFilter === 'ALL' || c.type === typeFilter;
+    return matchesSearch && matchesType;
+  });
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+      {/* Top Header Card */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-            Containers & Tamper-Evident Seals
+          <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+            <span>Containers & Tamper-Evident Seals</span>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+              {containers.length} Registered
+            </span>
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Physical bins, security crates, and RFID pallets assigned to shipments with tamper seals.
+            Physical bins, security crates, and RFID pallets with automated continuous OpenCV barcode scanning.
           </p>
         </div>
 
         <button
-          onClick={() => {
-            handleAutoFill();
-            setModalOpen(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm shadow-indigo-600/30 transition cursor-pointer"
+          onClick={openCreateModal}
+          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm shadow-indigo-600/30 transition cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Add Container</span>
         </button>
       </div>
 
-      {/* Containers Grid */}
+      {/* Search & Filter Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search by Container Number, Seal ID, Shipment, or Location..."
+            className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-slate-400 shrink-0" />
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+            className="text-xs font-semibold px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          >
+            <option value="ALL">All Container Types</option>
+            {CONTAINER_TYPES.map(t => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Containers Grid (Exact Match to Image 2 Dark Theme Aesthetic) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {containers.map(c => {
-          const loadPercent = Math.min(100, Math.round((c.currentWeightKg / c.capacityKg) * 100));
-          const assignedShipment = shipments.find(s => s.id === c.assignedShipmentId);
+        {filteredContainers.map(c => {
+          const loadPercent = Math.min(
+            100,
+            Math.round(((c.currentWeightKg || c.utilizedCapacity || 0) / (c.maxCapacity || c.capacityKg || 150)) * 100)
+          );
+          const isMenuOpen = activeMenuId === c.id;
 
           return (
             <div
               key={c.id}
-              className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between hover:border-indigo-300 transition"
+              className="bg-black text-white rounded-2xl border border-neutral-800 p-5 shadow-xl flex flex-col justify-between hover:border-indigo-500/50 transition-all relative"
             >
               <div className="space-y-4">
-                {/* Header */}
-                <div className="flex items-start justify-between">
-                  <div className="space-y-0.5">
+                {/* Header: Container Icon + Number + 3-Dots Menu */}
+                <div className="flex items-start justify-between relative">
+                  <div>
                     <div className="flex items-center gap-2">
-                      <Archive className="w-4 h-4 text-indigo-600" />
-                      <span className="font-mono text-base font-extrabold text-slate-900">
+                      <Archive className="w-5 h-5 text-indigo-400" />
+                      <span className="font-mono text-base font-extrabold text-white tracking-wide">
                         {c.containerNumber}
                       </span>
                     </div>
-                    <span className="text-xs font-semibold text-slate-500">
+                    <p className="text-xs text-neutral-400 mt-0.5 font-medium">
                       {c.type}
-                    </span>
+                    </p>
                   </div>
 
-                  <StatusBadge status={c.status} size="sm" />
+                  {/* 3-Dots Action Button & Dropdown Menu (Exact match to Image 2) */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setActiveMenuId(isMenuOpen ? null : c.id)}
+                      className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/80 transition cursor-pointer"
+                      title="Actions"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+
+                    {isMenuOpen && (
+                      <div className="absolute right-0 top-8 z-30 w-44 rounded-xl bg-neutral-900 border border-neutral-700/80 shadow-2xl p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveMenuId(null);
+                            setDetailsModalContainer(c);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-neutral-200 hover:bg-neutral-800 rounded-lg transition text-left cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>View Details</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveMenuId(null);
+                            openScanModalForContainer(c);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-indigo-300 hover:text-white hover:bg-indigo-950/70 border border-indigo-900/40 rounded-lg transition text-left cursor-pointer group"
+                        >
+                          <Scan className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+                          <span>Scan Products</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveMenuId(null);
+                            setEditModalContainer(c);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-neutral-200 hover:bg-neutral-800 rounded-lg transition text-left cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Edit</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveMenuId(null);
+                            toggleContainerStatus(c.id, user?.name, role || undefined);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-neutral-200 hover:bg-neutral-800 rounded-lg transition text-left cursor-pointer"
+                        >
+                          <Ban className="w-3.5 h-3.5 text-rose-400" />
+                          <span>{c.isActive === false || c.status === 'Inactive' ? 'Mark Active' : 'Mark Inactive'}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Seal Info Card */}
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                {/* Tamper Seal Section (Exact match to Image 2) */}
+                <div className="space-y-1 pt-1">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500 font-medium flex items-center gap-1">
-                      <Lock className="w-3.5 h-3.5 text-emerald-600" /> Tamper Seal:
+                    <span className="text-neutral-400 font-medium">Tamper Seal</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/80">
+                      {c.sealStatus || 'Active'}
                     </span>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(c.sealNumber);
-                        alert(`Copied seal "${c.sealNumber}" to clipboard!`);
-                      }}
-                      className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
-                      title="Copy Seal"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
                   </div>
-                  <div className="font-mono text-xs font-bold text-slate-800">
+                  <div className="font-mono text-sm font-extrabold text-white tracking-wide">
                     {c.sealNumber}
                   </div>
                 </div>
 
-                {/* Weight and Capacity Bar */}
-                <div className="space-y-1.5">
+                {/* Divider Line */}
+                <div className="border-t border-neutral-800/80" />
+
+                {/* Capacity Utilized & Progress Bar (Exact match to Image 2) */}
+                <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500 font-medium">Capacity Utilized:</span>
-                    <span className="font-bold text-slate-800">
-                      {c.currentWeightKg} kg / {c.capacityKg} kg ({loadPercent}%)
+                    <span className="text-neutral-300 font-medium">Capacity Utilized</span>
+                    <span className="font-mono font-bold text-white">
+                      {(c.currentWeightKg || c.utilizedCapacity || 0).toFixed(1)} {c.capacityUnit || 'kg'} /{' '}
+                      {c.maxCapacity || c.capacityKg || 150} {c.capacityUnit || 'kg'}
                     </span>
                   </div>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+
+                  <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all ${
+                      className={`h-full rounded-full transition-all duration-500 ${
                         loadPercent > 90
                           ? 'bg-rose-500'
-                          : loadPercent > 50
-                          ? 'bg-indigo-600'
-                          : 'bg-emerald-500'
+                          : loadPercent > 70
+                          ? 'bg-amber-400'
+                          : 'bg-indigo-600'
                       }`}
                       style={{ width: `${loadPercent}%` }}
                     />
                   </div>
                 </div>
 
-                {/* Assigned Shipment & Location */}
-                <div className="text-xs space-y-1 pt-2 border-t border-slate-100">
+                {/* Key Metrics: Shipment, Current Location, Items Loaded */}
+                <div className="text-xs space-y-2 pt-1 font-medium">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Assigned Shipment:</span>
-                    <span className="font-mono font-bold text-indigo-600">
-                      {assignedShipment ? assignedShipment.trackingNumber : 'None (Unassigned)'}
+                    <span className="text-neutral-400">Shipment</span>
+                    <span className="font-mono font-bold text-neutral-200">
+                      {c.assignedShipmentTracking || 'Unassigned'}
                     </span>
                   </div>
+
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Current Location:</span>
-                    <span className="font-semibold text-slate-700 truncate max-w-[170px]">
-                      {c.location}
+                    <span className="text-neutral-400">Current Location</span>
+                    <span className="font-semibold text-neutral-200 text-right truncate max-w-[190px]">
+                      {c.location || c.initialLocation}
                     </span>
                   </div>
+
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-400">Items Loaded:</span>
-                    <span className="font-bold text-slate-800">
-                      {c.itemCount} units
+                    <span className="text-neutral-400">Items Loaded</span>
+                    <span className="font-mono font-bold text-white">
+                      {c.itemCount || (c.items ? c.items.reduce((s, i) => s + i.quantity, 0) : 0)} units
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Bottom Quick Action */}
-              <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(c.containerNumber);
-                    alert(`Copied container ID "${c.containerNumber}" to clipboard!`);
-                  }}
-                  className="text-xs font-semibold text-slate-600 hover:text-indigo-600 flex items-center gap-1 cursor-pointer"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy ID</span>
-                </button>
+              {/* Bottom Footer: Container ID + Enabled / Active Badge */}
+              <div className="mt-5 pt-3 border-t border-neutral-800/80 flex items-center justify-between text-xs">
+                <span className="font-mono text-neutral-400 text-[11px]">
+                  {c.containerNumber}
+                </span>
 
-                <span className="text-[11px] font-mono text-slate-400">
-                  ID: {c.id}
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    c.isActive === false || c.status === 'Inactive'
+                      ? 'bg-neutral-800 text-neutral-400'
+                      : 'bg-neutral-800 text-neutral-200'
+                  }`}
+                >
+                  {c.isActive === false || c.status === 'Inactive' ? 'Inactive' : 'Enabled'}
                 </span>
               </div>
             </div>
@@ -202,105 +710,797 @@ export const OwnerContainers: React.FC = () => {
         })}
       </div>
 
-      {/* Modal: Create Container */}
-      <Modal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title="Initialize New Transport Container"
-        subtitle="Provision physical bin and assign tamper-evident seal number."
-        maxWidth="md"
-      >
-        <form onSubmit={handleCreate} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Container Type
-            </label>
-            <select
-              value={type}
-              onChange={e => setType(e.target.value as Container['type'])}
-              className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="Cold-Chain Bin">Cold-Chain Bin (Vaccines/Biologics)</option>
-              <option value="Security Crate">Security Crate (High-Value Sensors)</option>
-              <option value="RFID Pallet">RFID Pallet (Bulk Freight)</option>
-              <option value="Standard Parcel">Standard Parcel (Express Box)</option>
-              <option value="Heavy Duty Tote">Heavy Duty Tote (Reusable)</option>
-            </select>
-          </div>
+      {filteredContainers.length === 0 && (
+        <div className="p-12 text-center bg-white rounded-2xl border border-slate-200">
+          <Archive className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-sm font-bold text-slate-800">No Containers Found</h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+            No transport containers match your search criteria. Click "+ Add Container" above to provision one.
+          </p>
+        </div>
+      )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Container Number
-              </label>
-              <input
-                type="text"
-                required
-                value={containerNumber}
-                onChange={e => setContainerNumber(e.target.value)}
-                placeholder="e.g. CNT-ALPHA-882"
-                className="w-full px-3 py-2 text-xs sm:text-sm font-mono uppercase bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-              />
+      {/* ======================================================== */}
+      {/* MODAL 1: ADD CONTAINER WITH OPENCV BARCODE SCANNER       */}
+      {/* ======================================================== */}
+      {createModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl text-white overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+              <div>
+                <h3 className="text-base sm:text-lg font-extrabold text-white tracking-tight flex items-center gap-2">
+                  <Archive className="w-5 h-5 text-indigo-400" />
+                  <span>Provision New Container & Scan Products</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Configure container parameters and continuously scan product barcodes with OpenCV.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCreateModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Max Capacity (kg)
-              </label>
-              <input
-                type="number"
-                min="10"
-                value={capacityKg}
-                onChange={e => setCapacityKg(Number(e.target.value))}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg"
-              />
+            {/* Modal Scrollable Body */}
+            <form onSubmit={handleCreateSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+              {/* SECTION 1: CONTAINER INFORMATION */}
+              <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
+                    <span>1. Container Information</span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleAutoFill}
+                    className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Auto-Generate Info</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Container Number */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Container Number <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={containerNumber}
+                      onChange={e => setContainerNumber(e.target.value)}
+                      placeholder="e.g. CNT-ALPHA-881"
+                      className="w-full px-3.5 py-2 text-xs sm:text-sm font-mono uppercase bg-slate-900 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    />
+                  </div>
+
+                  {/* Container Type Dropdown */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Container Type <span className="text-rose-400">*</span>
+                    </label>
+                    <select
+                      value={containerType}
+                      onChange={e => setContainerType(e.target.value as ContainerType)}
+                      className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    >
+                      {CONTAINER_TYPES.map(t => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Maximum Capacity & Unit */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Maximum Capacity <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      value={maxCapacity}
+                      onChange={e => setMaxCapacity(Number(e.target.value))}
+                      placeholder="150"
+                      className="w-full px-3.5 py-2 text-xs sm:text-sm font-mono bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Capacity Unit <span className="text-rose-400">*</span>
+                    </label>
+                    <select
+                      value={capacityUnit}
+                      onChange={e => setCapacityUnit(e.target.value as 'kg' | 'lbs' | 'units')}
+                      className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    >
+                      <option value="kg">Kilograms (kg)</option>
+                      <option value="lbs">Pounds (lbs)</option>
+                      <option value="units">Discrete Units (count)</option>
+                    </select>
+                  </div>
+
+                  {/* Tamper-Evident Seal Number */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Tamper-Evident Seal Number <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={sealNumber}
+                      onChange={e => setSealNumber(e.target.value)}
+                      placeholder="e.g. SEAL-SEC-99014"
+                      className="w-full px-3.5 py-2 text-xs sm:text-sm font-mono uppercase bg-slate-900 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    />
+                  </div>
+
+                  {/* Initial Location Dropdown */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                      Initial Location <span className="text-rose-400">*</span>
+                    </label>
+                    <select
+                      value={initialLocation}
+                      onChange={e => setInitialLocation(e.target.value)}
+                      className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    >
+                      {WAREHOUSE_LOCATIONS.map(loc => (
+                        <option key={loc} value={loc}>
+                          {loc}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Description / Handling Instructions (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="Temperature control specifics, hazardous handling notes, or route requirements..."
+                    className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-900 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 resize-y"
+                  />
+                </div>
+              </div>
+
+              {/* SECTION 2: SCAN PRODUCTS (OPENCV CONTINUOUS BARCODE SCANNER) */}
+              <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
+                    <span>2. Scan Products</span>
+                  </h4>
+
+                  {/* Live Capacity Utilized Bar */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono font-bold text-slate-300">
+                      Utilized: {currentUtilizedCapacity.toFixed(1)} / {maxCapacity} {capacityUnit} ({utilizedPercent}%)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Capacity Progress Bar */}
+                <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-300 ${
+                      utilizedPercent >= 100
+                        ? 'bg-rose-500'
+                        : utilizedPercent > 80
+                        ? 'bg-amber-400'
+                        : 'bg-indigo-500'
+                    }`}
+                    style={{ width: `${utilizedPercent}%` }}
+                  />
+                </div>
+
+                {/* Capacity Validation Error Banner */}
+                {capacityError && (
+                  <div className="p-3 bg-rose-950/80 border border-rose-800 rounded-xl text-xs text-rose-300 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>{capacityError}</span>
+                  </div>
+                )}
+
+                {/* The OpenCV Barcode Scanner Component */}
+                <OpenCvBarcodeScanner
+                  onScan={handleBarcodeScan}
+                  isScanning={isScanning}
+                  onToggleScanning={setIsScanning}
+                  simulationProducts={simulationProducts}
+                />
+
+                {/* Scanned Products List Table (With "remove in UI please :>") */}
+                <div className="space-y-3 pt-3 border-t border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                      <Package className="w-4 h-4 text-indigo-400" />
+                      <span>Scanned Products List ({scannedItems.length} lines • {currentTotalUnits} units)</span>
+                    </div>
+
+                    {scannedItems.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setScannedItems([])}
+                        className="text-xs text-rose-400 hover:text-rose-300 font-semibold cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+
+                  {scannedItems.length === 0 ? (
+                    <div className="p-6 text-center rounded-xl border border-dashed border-slate-800 bg-slate-900/40 text-slate-400 text-xs">
+                      No products scanned yet. Point your camera at product barcodes above or enter barcode numbers.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/60">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800 font-bold">
+                          <tr>
+                            <th className="px-3.5 py-2.5">Product Name</th>
+                            <th className="px-3.5 py-2.5">SKU / Barcode</th>
+                            <th className="px-3.5 py-2.5 text-center">Quantity</th>
+                            <th className="px-3.5 py-2.5 text-right">Weight ({capacityUnit})</th>
+                            <th className="px-3.5 py-2.5 text-center">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {scannedItems.map(item => (
+                            <tr key={item.productId} className="hover:bg-slate-800/40 transition">
+                              <td className="px-3.5 py-2.5 font-bold text-white">
+                                {item.productName}
+                              </td>
+                              <td className="px-3.5 py-2.5 font-mono text-slate-400 text-[11px]">
+                                {item.sku}
+                                <span className="block text-[10px] text-slate-500 font-mono">
+                                  {item.barcode}
+                                </span>
+                              </td>
+                              <td className="px-3.5 py-2.5">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAdjustQuantity(item.productId, -1)}
+                                    className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition cursor-pointer"
+                                    title="Decrease quantity"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="font-mono font-bold text-white min-w-[20px] text-center">
+                                    {item.quantity}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAdjustQuantity(item.productId, 1)}
+                                    className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition cursor-pointer"
+                                    title="Increase quantity"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-3.5 py-2.5 text-right font-mono font-bold text-white">
+                                {item.totalWeight.toFixed(1)} {capacityUnit}
+                                <span className="block text-[10px] text-slate-500 font-normal">
+                                  {item.unitWeight} {capacityUnit}/ea
+                                </span>
+                              </td>
+                              {/* Remove in UI Action button ("remove in UI please :>") */}
+                              <td className="px-3.5 py-2.5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveScannedItem(item.productId)}
+                                  className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-950/80 border border-transparent hover:border-rose-800 transition cursor-pointer"
+                                  title="Remove product from container"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* SECTION 3: SYSTEM-GENERATED FIELDS */}
+              <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800 space-y-3">
+                <h4 className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
+                  <Info className="w-4 h-4 text-indigo-400" />
+                  <span>3. System-Generated Fields</span>
+                </h4>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10.5px] text-slate-400 font-medium block">Container ID</span>
+                    <span className="font-mono font-bold text-indigo-400">
+                      Auto-generated
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10.5px] text-slate-400 font-medium block">Status</span>
+                    <span className="font-bold text-emerald-400">
+                      Active
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10.5px] text-slate-400 font-medium block">Utilized Capacity</span>
+                    <span className="font-mono font-bold text-white">
+                      {currentUtilizedCapacity.toFixed(1)} {capacityUnit}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10.5px] text-slate-400 font-medium block">Assigned Shipment</span>
+                    <span className="font-mono font-semibold text-slate-300">
+                      Unassigned
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10.5px] text-slate-400 font-medium block">Created At</span>
+                    <span className="font-semibold text-slate-300">
+                      Automatic (Current Time)
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10.5px] text-slate-400 font-medium block">Created By</span>
+                    <span className="font-bold text-white truncate block">
+                      {user?.name || 'Dhruva (Owner)'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setCreateModalOpen(false)}
+                  className="px-5 py-2.5 text-xs sm:text-sm font-semibold text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-600/30 transition cursor-pointer flex items-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Create & Initialize Container</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 2: CONTAINER DETAILS MODAL                         */}
+      {/* ======================================================== */}
+      {detailsModalContainer && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl text-white space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Archive className="w-5 h-5 text-indigo-400" />
+                  <h3 className="text-lg font-mono font-extrabold text-white">
+                    {detailsModalContainer.containerNumber}
+                  </h3>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold">
+                    {detailsModalContainer.status}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  {detailsModalContainer.type} • ID: {detailsModalContainer.id}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setDetailsModalContainer(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <div>
+                <span className="text-slate-500 font-medium block">Tamper-Evident Seal</span>
+                <span className="font-mono font-bold text-white text-sm">
+                  {detailsModalContainer.sealNumber}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-slate-500 font-medium block">Capacity</span>
+                <span className="font-mono font-bold text-white text-sm">
+                  {(detailsModalContainer.currentWeightKg || detailsModalContainer.utilizedCapacity || 0).toFixed(1)} /{' '}
+                  {detailsModalContainer.maxCapacity || detailsModalContainer.capacityKg} {detailsModalContainer.capacityUnit || 'kg'}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-slate-500 font-medium block">Assigned Shipment</span>
+                <span className="font-mono font-bold text-indigo-400">
+                  {detailsModalContainer.assignedShipmentTracking || 'Unassigned'}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-slate-500 font-medium block">Current Location</span>
+                <span className="font-semibold text-slate-200">
+                  {detailsModalContainer.location}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-slate-500 font-medium block">Created At</span>
+                <span className="font-mono text-slate-300">
+                  {new Date(detailsModalContainer.createdAt).toLocaleString()}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-slate-500 font-medium block">Created By</span>
+                <span className="font-semibold text-slate-300">
+                  {detailsModalContainer.createdBy}
+                </span>
+              </div>
+            </div>
+
+            {/* Loaded Products Itemized List */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                <span>Loaded Items ({detailsModalContainer.items?.length || 0})</span>
+                <span className="text-slate-400">
+                  {detailsModalContainer.itemCount || 0} Total Units
+                </span>
+              </h4>
+
+              {(!detailsModalContainer.items || detailsModalContainer.items.length === 0) ? (
+                <div className="p-4 text-center rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-500">
+                  No scanned products recorded in this container.
+                </div>
+              ) : (
+                <div className="max-h-48 overflow-y-auto space-y-2">
+                  {detailsModalContainer.items.map((it, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <div className="font-bold text-white">{it.productName}</div>
+                        <div className="font-mono text-[10.5px] text-slate-400">
+                          SKU: {it.sku} • BC: {it.barcode}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono font-bold text-white">
+                          {it.quantity} units
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          {it.weightKg.toFixed(1)} kg
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setDetailsModalContainer(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
+        </div>
+      )}
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Tamper-Evident Seal ID
-            </label>
-            <input
-              type="text"
-              required
-              value={sealNumber}
-              onChange={e => setSealNumber(e.target.value)}
-              placeholder="e.g. SEAL-SEC-99120"
-              className="w-full px-3 py-2 text-xs sm:text-sm font-mono uppercase bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
+      {/* ======================================================== */}
+      {/* MODAL 3: EDIT CONTAINER MODAL                            */}
+      {/* ======================================================== */}
+      {editModalContainer && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl text-white space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Edit2 className="w-4 h-4 text-amber-400" />
+              <span>Edit Container {editModalContainer.containerNumber}</span>
+            </h3>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Initial Warehouse Location
-            </label>
-            <input
-              type="text"
-              value={location}
-              onChange={e => setLocation(e.target.value)}
-              placeholder="e.g. Apex Central Depot Storage Bay 2"
-              className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">
+                  Location
+                </label>
+                <select
+                  defaultValue={editModalContainer.location}
+                  id="edit-location-select"
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white"
+                >
+                  {WAREHOUSE_LOCATIONS.map(loc => (
+                    <option key={loc} value={loc}>
+                      {loc}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setModalOpen(false)}
-              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm shadow-indigo-600/30 transition cursor-pointer"
-            >
-              Create Container
-            </button>
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">
+                  Tamper Seal ID
+                </label>
+                <input
+                  type="text"
+                  defaultValue={editModalContainer.sealNumber}
+                  id="edit-seal-input"
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">
+                  Description
+                </label>
+                <textarea
+                  rows={3}
+                  defaultValue={editModalContainer.description || ''}
+                  id="edit-desc-input"
+                  className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3">
+              <button
+                type="button"
+                onClick={() => setEditModalContainer(null)}
+                className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const locEl = document.getElementById('edit-location-select') as HTMLSelectElement;
+                  const sealEl = document.getElementById('edit-seal-input') as HTMLInputElement;
+                  const descEl = document.getElementById('edit-desc-input') as HTMLTextAreaElement;
+
+                  updateContainer(
+                    editModalContainer.id,
+                    {
+                      location: locEl?.value || editModalContainer.location,
+                      sealNumber: sealEl?.value || editModalContainer.sealNumber,
+                      description: descEl?.value || editModalContainer.description
+                    },
+                    user?.name || 'Dhruva (Owner)',
+                    role || 'OWNER'
+                  );
+                  setEditModalContainer(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md cursor-pointer"
+              >
+                Save Changes
+              </button>
+            </div>
           </div>
-        </form>
-      </Modal>
+        </div>
+      )}
+      {/* ======================================================== */}
+      {/* MODAL 4: OPENCV SCAN PRODUCTS MODAL (FROM CARD MENU)     */}
+      {/* ======================================================== */}
+      {scanModalContainer && (() => {
+        const maxCap = scanModalContainer.maxCapacity || scanModalContainer.capacityKg || 150;
+        const currentUtilized = containerScanItems.reduce(
+          (acc, i) => acc + (i.weightKg || i.unitWeightKg * i.quantity),
+          0
+        );
+        const totalUnits = containerScanItems.reduce((acc, i) => acc + i.quantity, 0);
+        const percent = Math.min(100, Math.round((currentUtilized / maxCap) * 100));
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl text-white overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="p-5 sm:p-6 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Scan className="w-5 h-5 text-indigo-400" />
+                    <h3 className="text-base sm:text-lg font-mono font-extrabold text-white tracking-wide">
+                      Scan Products into {scanModalContainer.containerNumber}
+                    </h3>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-700 text-indigo-300 font-bold">
+                      {scanModalContainer.type}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span>Tamper Seal: <span className="font-mono text-slate-300">{scanModalContainer.sealNumber}</span></span>
+                    <span>•</span>
+                    <span>Location: {scanModalContainer.location}</span>
+                    <span>•</span>
+                    <span className="text-indigo-400 font-bold">Capacity: {currentUtilized.toFixed(1)} / {maxCap} {scanModalContainer.capacityUnit || 'kg'} ({percent}% Full)</span>
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setScanModalContainer(null)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Scrollable Body */}
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
+
+                {/* Capacity Error Notification Banner */}
+                {containerScanError && (
+                  <div className="p-3.5 bg-rose-950/80 border border-rose-800 rounded-xl text-xs text-rose-300 flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>{containerScanError}</span>
+                  </div>
+                )}
+
+                {/* 2. OpenCV Camera Barcode Scanner Component */}
+                <div className="bg-slate-950/70 p-4 sm:p-5 rounded-2xl border border-slate-800">
+                  <OpenCvBarcodeScanner
+                    onScan={handleContainerBarcodeScan}
+                    isScanning={isContainerScanning}
+                    onToggleScanning={setIsContainerScanning}
+                    simulationProducts={simulationProducts}
+                  />
+                </div>
+
+                {/* 3. Loaded Products in this Container (with "remove in UI please :>") */}
+                <div className="bg-slate-950/70 p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                      <Package className="w-4 h-4 text-indigo-400" />
+                      <span>
+                        Products in {scanModalContainer.containerNumber} ({containerScanItems.length} lines • {totalUnits} units)
+                      </span>
+                    </h4>
+
+                    {containerScanItems.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setContainerScanItems([]);
+                          updateContainer(
+                            scanModalContainer.id,
+                            { items: [] },
+                            user?.name || 'Dhruva (Owner)',
+                            role || undefined
+                          );
+                        }}
+                        className="text-xs text-rose-400 hover:text-rose-300 font-semibold cursor-pointer"
+                      >
+                        Clear Container
+                      </button>
+                    )}
+                  </div>
+
+                  {containerScanItems.length === 0 ? (
+                    <div className="p-6 text-center rounded-xl border border-dashed border-slate-800 bg-slate-900/40 text-slate-400 text-xs">
+                      No products loaded into this container yet. Start the scanner above or enter barcode numbers manually below.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/60">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800 font-bold">
+                          <tr>
+                            <th className="px-3.5 py-2.5">Product Name</th>
+                            <th className="px-3.5 py-2.5">SKU / Barcode</th>
+                            <th className="px-3.5 py-2.5 text-center">Quantity</th>
+                            <th className="px-3.5 py-2.5 text-right">Total Weight</th>
+                            <th className="px-3.5 py-2.5 text-center">Remove Item</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {containerScanItems.map(item => (
+                            <tr key={item.productId} className="hover:bg-slate-800/40 transition">
+                              <td className="px-3.5 py-2.5 font-bold text-white">
+                                {item.productName}
+                              </td>
+                              <td className="px-3.5 py-2.5 font-mono text-slate-400 text-[11px]">
+                                {item.sku}
+                                <span className="block text-[10px] text-slate-500 font-mono">
+                                  {item.barcode}
+                                </span>
+                              </td>
+                              <td className="px-3.5 py-2.5">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAdjustContainerItemQty(item.productId, -1)}
+                                    className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition cursor-pointer"
+                                    title="Decrease quantity"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="font-mono font-bold text-white min-w-[20px] text-center">
+                                    {item.quantity}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAdjustContainerItemQty(item.productId, 1)}
+                                    className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition cursor-pointer"
+                                    title="Increase quantity"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-3.5 py-2.5 text-right font-mono font-bold text-white">
+                                {item.weightKg.toFixed(1)} {scanModalContainer.capacityUnit || 'kg'}
+                                <span className="block text-[10px] text-slate-500 font-normal">
+                                  {item.unitWeightKg} {scanModalContainer.capacityUnit || 'kg'}/ea
+                                </span>
+                              </td>
+                              {/* Remove in UI action button ("remove in UI please :>") */}
+                              <td className="px-3.5 py-2.5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveContainerItem(item.productId)}
+                                  className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-950/80 border border-transparent hover:border-rose-800 transition cursor-pointer"
+                                  title="Remove product from container"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 sm:p-5 border-t border-slate-800 flex items-center justify-between bg-slate-950">
+                <span className="text-xs text-slate-400">
+                  All changes are automatically synced to container manifest.
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setScanModalContainer(null)}
+                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-indigo-600/30 transition cursor-pointer"
+                >
+                  Done & Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

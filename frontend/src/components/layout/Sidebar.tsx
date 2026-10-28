@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
@@ -47,9 +47,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { to: '/owner/products', label: 'Products & SKUs', icon: Box },
         { to: '/owner/containers', label: 'Containers', icon: Archive },
         { to: '/owner/shipments', label: 'Shipments & Manifests', icon: Truck },
-        { to: '/owner/scanner', label: 'QR/Barcode Scanner', icon: ScanLine, highlight: true },
-        { to: '/owner/discrepancies', label: 'Discrepancy Engine', icon: AlertTriangle, badge: openExceptionsCount > 0 ? openExceptionsCount.toString() : undefined },
-        { to: '/owner/inventory', label: 'Master Inventory', icon: Layers },
         { to: '/owner/returns', label: 'Returns & Replacements', icon: RotateCcw },
         { to: '/owner/analytics', label: 'Logistics Analytics', icon: BarChart3 },
         { to: '/owner/audit-log', label: 'Audit Trail', icon: FileText },

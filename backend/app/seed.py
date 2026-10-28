@@ -1,4 +1,4 @@
-"""
+﻿"""
 Database Seed Script for DHARM Logistics ERP
 Initializes demo users, master catalog products, tamper-evident containers,
 and sample shipments for instant out-of-the-box readiness.
@@ -6,11 +6,18 @@ and sample shipments for instant out-of-the-box readiness.
 import sys
 import os
 
+# Ensure UTF-8 output on Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from datetime import datetime, timedelta
 
 # Add parent directory to path
@@ -28,13 +35,13 @@ from app.models.order import Order, OrderItem
 
 
 def seed_database():
-    print("🚀 Initializing database tables...")
+    print("[INIT] Initializing database tables...")
     init_db()
     db = SessionLocal()
 
     try:
         # 1. Seed Users
-        print("👤 Checking users...")
+        print("[USERS] Checking users...")
         demo_users = [
             {
                 "id": "usr-owner-01",
@@ -43,7 +50,7 @@ def seed_database():
                 "role": UserRoleEnum.OWNER,
                 "organization": "Apex Global Logistics & Medical Supply",
                 "location": "Central Distribution Center, Hub Alpha",
-                "avatar": "👑"
+                "avatar": "Owner"
             },
             {
                 "id": "usr-vendor-02",
@@ -52,7 +59,7 @@ def seed_database():
                 "role": UserRoleEnum.VENDOR,
                 "organization": "Trans-Express Regional Logistics",
                 "location": "Midwest Sorting & Cross-Dock Hub 4",
-                "avatar": "🏢"
+                "avatar": "Vendor"
             },
             {
                 "id": "usr-cust-03",
@@ -61,7 +68,7 @@ def seed_database():
                 "role": UserRoleEnum.CUSTOMER,
                 "organization": "BioMed Advanced Research Diagnostics",
                 "location": "BioMed Campus Bay 2, Tech Park",
-                "avatar": "🔬"
+                "avatar": "Customer"
             }
         ]
 
@@ -82,7 +89,7 @@ def seed_database():
                 print(f"  + Added user: {u_data['email']} ({u_data['role'].value})")
 
         # 2. Seed Master Catalog Products
-        print("📦 Checking products...")
+        print("[PRODUCTS] Checking products...")
         initial_products = [
             {
                 "id": "prod-sas-01",
@@ -183,7 +190,7 @@ def seed_database():
                 print(f"  + Added product: {p_data['name']} ({p_data['sku']})")
 
         # 3. Seed Containers
-        print("🛡 Checking tamper-evident containers...")
+        print("[CONTAINERS] Checking tamper-evident containers...")
         initial_containers = [
             {
                 "id": "cnt-001",
@@ -239,7 +246,7 @@ def seed_database():
                 print(f"  + Added container: {c_data['container_number']}")
 
         # 4. Seed Initial Shipment
-        print("🚚 Checking shipments...")
+        print("[SHIPMENTS] Checking shipments...")
         existing_shp = db.query(Shipment).filter(Shipment.id == "shp-2026-101").first()
         if not existing_shp:
             shipment = Shipment(
@@ -314,8 +321,9 @@ def seed_database():
             print("  + Added shipment: DHRM-TRK-77421")
 
         # 5. Seed Audit Event
-        print("📑 Checking audit log...")
-        if not db.query(AuditEvent).filter(AuditEvent.id == "aud-init-01").first():
+        print("[AUDIT] Checking audit log...")
+        aud = db.query(AuditEvent).filter(AuditEvent.id == "aud-init-01").first()
+        if not aud:
             aud = AuditEvent(
                 id="aud-init-01",
                 actor_name="Dhruva (Owner)",
@@ -329,7 +337,7 @@ def seed_database():
             db.add(aud)
 
         # 6. Seed Demo Orders
-        print("🛒 Checking orders...")
+        print("[ORDERS] Checking orders...")
         if not db.query(Order).filter(Order.id == "ord-sample-01").first():
             sample_order = Order(
                 id="ord-sample-01",
@@ -374,11 +382,11 @@ def seed_database():
             print("  + Added demo order: ORD-DHM-2026-8819")
 
         db.commit()
-        print("✅ Database seeding completed successfully!")
+        print("[SUCCESS] Database tables verified and seeded successfully!")
 
     except Exception as e:
         db.rollback()
-        print(f"❌ Error during database seeding: {e}")
+        print(f"[ERROR] Error during database seeding: {e}")
         raise e
     finally:
         db.close()

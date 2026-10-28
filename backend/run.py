@@ -1,12 +1,19 @@
-import sys
-
-if hasattr(sys.stdout, "reconfigure"):
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
+﻿import sys
 import argparse
 import uvicorn
+
+# Ensure UTF-8 output on Windows consoles
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from app.config import settings
 from app.seed import seed_database
 
@@ -21,15 +28,15 @@ def main():
     args = parser.parse_args()
 
     if args.seed:
-        print("🌱 Seeding database...")
+        print("[SEED] Seeding database...")
         try:
             seed_database()
         except Exception as e:
-            print(f"⚠️ Seeding notice: {e}")
+            print(f"[WARN] Seeding notice: {e}")
 
-    print(f"🚀 Starting DHARM Backend server at http://{args.host}:{args.port}")
-    print(f"📖 Swagger interactive API documentation: http://localhost:{args.port}/docs")
-    print(f"📖 ReDoc interactive documentation: http://localhost:{args.port}/redoc")
+    print(f"[START] Starting DHARM Backend server at http://{args.host}:{args.port}")
+    print(f"[DOCS] Swagger interactive API documentation: http://localhost:{args.port}/docs")
+    print(f"[DOCS] ReDoc interactive documentation: http://localhost:{args.port}/redoc")
 
     uvicorn.run(
         "app.main:app",

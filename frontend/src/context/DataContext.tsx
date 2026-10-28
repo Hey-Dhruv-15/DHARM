@@ -1091,6 +1091,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
 
       if (status === 'Delivered') {
+        // Sync delivery & archival with FastAPI backend
+        try {
+          fetch(`http://localhost:8000/api/orders/${orderId}/deliver`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              notes: 'Customer confirmed physical delivery handover',
+              deliveredBy: actorName || customerProfile.name || 'Customer Consignee'
+            })
+          }).catch(err => {
+            console.warn('Backend order deliver sync notice:', err);
+          });
+        } catch (e) {
+          // Non-blocking fallback
+        }
+
         const newNotif: CustomerNotification = {
           id: `notif-${Date.now()}`,
           customerId: targetOrder.customerId,
@@ -1103,6 +1119,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           severity: 'success'
         };
         setNotifications(prev => [newNotif, ...prev]);
+      } else {
+        // Sync other status updates
+        try {
+          fetch(`http://localhost:8000/api/orders/${orderId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+          }).catch(err => {
+            console.warn('Backend order status sync notice:', err);
+          });
+        } catch (e) {
+          // Non-blocking fallback
+        }
       }
     }
   };

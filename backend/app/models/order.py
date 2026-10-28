@@ -59,3 +59,33 @@ class OrderItem(Base):
     total_price = Column(Float, default=0.0)
 
     order = relationship("Order", back_populates="items")
+
+
+class OrderHistory(Base):
+    __tablename__ = "order_history"
+
+    id = Column(String(64), primary_key=True, index=True)
+    original_order_id = Column(String(64), index=True, nullable=False)
+    order_number = Column(String(100), index=True, nullable=False)
+    customer_id = Column(String(64), nullable=False, index=True)
+    customer_name = Column(String(255), nullable=False)
+    customer_account = Column(String(255), nullable=True)
+    customer_po_reference = Column(String(100), nullable=False, index=True)
+    delivery_location = Column(String(255), nullable=True)
+    logistics_carrier = Column(String(100), nullable=True)
+    payment_terms = Column(String(100), nullable=True)
+    order_remarks = Column(Text, nullable=True)
+    order_date = Column(DateTime, nullable=False)
+    delivered_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(String(50), default="Delivered")
+    subtotal = Column(Float, default=0.0)
+    tax_total = Column(Float, default=0.0)
+    grand_total = Column(Float, default=0.0)
+    shipping_address = Column(JSON, nullable=True)
+    billing_address = Column(JSON, nullable=True)
+    tracking_number = Column(String(100), nullable=True)
+    invoice_number = Column(String(100), nullable=True)
+    items_snapshot = Column(JSON, default=list)
+    delivered_by = Column(String(255), nullable=True)
+    delivery_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

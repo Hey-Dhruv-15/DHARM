@@ -58,6 +58,14 @@ class OrderCancelRequest(BaseModel):
     reason: str
 
 
+class OrderDeliveryRequest(BaseModel):
+    notes: Optional[str] = Field(default="Delivered to primary receiving dock", description="Inspection or delivery remarks")
+    delivered_by: Optional[str] = Field(default="Carrier Representative", alias="deliveredBy")
+
+    class Config:
+        populate_by_name = True
+
+
 class OrderOut(BaseModel):
     id: str
     order_number: str = Field(..., alias="orderNumber")
@@ -90,4 +98,51 @@ class OrderOut(BaseModel):
 
     class Config:
         from_attributes = True
+        populate_by_name = True
+
+
+class OrderHistoryOut(BaseModel):
+    id: str
+    original_order_id: str = Field(..., alias="originalOrderId")
+    order_number: str = Field(..., alias="orderNumber")
+    customer_id: str = Field(..., alias="customerId")
+    customer_name: str = Field(..., alias="customerName")
+    customer_account: Optional[str] = Field(default=None, alias="customerAccount")
+    customer_po_reference: str = Field(..., alias="customerPoReference")
+    delivery_location: Optional[str] = Field(default=None, alias="deliveryLocation")
+    logistics_carrier: Optional[str] = Field(default=None, alias="logisticsCarrier")
+    payment_terms: Optional[str] = Field(default=None, alias="paymentTerms")
+    order_remarks: Optional[str] = Field(default=None, alias="orderRemarks")
+    order_date: datetime = Field(..., alias="orderDate")
+    delivered_at: datetime = Field(..., alias="deliveredAt")
+    status: str = "Delivered"
+    subtotal: float
+    tax_total: float = Field(..., alias="taxTotal")
+    grand_total: float = Field(..., alias="grandTotal")
+    shipping_address: Optional[Any] = Field(default=None, alias="shippingAddress")
+    billing_address: Optional[Any] = Field(default=None, alias="billingAddress")
+    tracking_number: Optional[str] = Field(default=None, alias="trackingNumber")
+    invoice_number: Optional[str] = Field(default=None, alias="invoiceNumber")
+    items_snapshot: List[Any] = Field(default=[], alias="itemsSnapshot")
+    delivered_by: Optional[str] = Field(default=None, alias="deliveredBy")
+    delivery_notes: Optional[str] = Field(default=None, alias="deliveryNotes")
+    created_at: datetime = Field(..., alias="createdAt")
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True
+
+
+class OrderDeliverResponse(BaseModel):
+    success: bool = True
+    message: str
+    order_id: str = Field(..., alias="orderId")
+    order_number: str = Field(..., alias="orderNumber")
+    status: str = "Delivered"
+    delivered_at: datetime = Field(..., alias="deliveredAt")
+    archived_to_history: bool = Field(default=True, alias="archivedToHistory")
+    history_id: str = Field(..., alias="historyId")
+    history: Optional[OrderHistoryOut] = None
+
+    class Config:
         populate_by_name = True

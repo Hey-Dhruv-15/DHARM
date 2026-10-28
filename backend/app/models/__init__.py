@@ -6,7 +6,7 @@ from app.models.discrepancy import DiscrepancyCase, DiscrepancyEvidence
 from app.models.scan import ScanRecord
 from app.models.return_case import ReturnCase
 from app.models.audit import AuditEvent
-from app.models.order import Order, OrderItem
+from app.models.order import Order, OrderItem, OrderHistory
 
 __all__ = [
     "User",
@@ -23,5 +23,6 @@ __all__ = [
     "ReturnCase",
     "AuditEvent",
     "Order",
-    "OrderItem"
+    "OrderItem",
+    "OrderHistory"
 ]

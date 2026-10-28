@@ -1,14 +1,17 @@
 from datetime import datetime, timedelta
 import random
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.models.order import Order, OrderItem
+from app.models.order import Order, OrderItem, OrderHistory
 from app.models.audit import AuditEvent
-from app.schemas.order import OrderCreate, OrderOut, OrderStatusUpdate, OrderCancelRequest
+from app.schemas.order import (
+    OrderCreate, OrderOut, OrderStatusUpdate, OrderCancelRequest,
+    OrderDeliveryRequest, OrderDeliverResponse, OrderHistoryOut
+)
 from app.core.security import get_current_user_optional
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -125,11 +128,13 @@ def list_orders(
     customer_id: Optional[str] = None,
     status: Optional[str] = None,
     search: Optional[str] = None,
+    active_only: bool = False,
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
     """
     List purchase orders with role-based filtering and status search.
+    Set active_only=true to exclude Delivered orders.
     """
     query = db.query(Order)
 
@@ -139,7 +144,9 @@ def list_orders(
     elif customer_id:
         query = query.filter(Order.customer_id == customer_id)
 
-    if status and status.upper() != "ALL":
+    if active_only:
+        query = query.filter(Order.status != "Delivered")
+    elif status and status.upper() != "ALL":
         query = query.filter(Order.status.ilike(status))
 
     if search:
@@ -151,8 +158,244 @@ def list_orders(
             (Order.tracking_number.ilike(s))
         )
 
-    orders = query.order_date.desc() if hasattr(query, "order_date") else query.order_by(Order.order_date.desc()).all()
+    orders = query.order_by(Order.order_date.desc()).all()
     return orders
+
+
+@router.get("/active", response_model=List[OrderOut])
+def list_active_orders(
+    customer_id: Optional[str] = None,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    """
+    List only currently active orders (Pending, Processing, Confirmed, Dispatched).
+    Delivered orders are excluded and kept in Order History.
+    """
+    query = db.query(Order).filter(Order.status != "Delivered")
+    if current_user and getattr(current_user, "role", None) == "CUSTOMER":
+        query = query.filter(Order.customer_id == current_user.id)
+    elif customer_id:
+        query = query.filter(Order.customer_id == customer_id)
+    return query.order_by(Order.order_date.desc()).all()
+
+
+@router.get("/history", response_model=List[OrderHistoryOut])
+def list_order_history(
+    customer_id: Optional[str] = None,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve all archived and completed Delivered orders from the Order History ledger.
+    """
+    query = db.query(OrderHistory)
+    if current_user and getattr(current_user, "role", None) == "CUSTOMER":
+        query = query.filter(OrderHistory.customer_id == current_user.id)
+    elif customer_id:
+        query = query.filter(OrderHistory.customer_id == customer_id)
+    return query.order_by(OrderHistory.delivered_at.desc()).all()
+
+
+@router.get("/history/{id}", response_model=OrderHistoryOut)
+def get_order_history_item(id: str, db: Session = Depends(get_db)):
+    """
+    Retrieve a specific archived order from Order History by order ID or Order Number.
+    """
+    hist = db.query(OrderHistory).filter(
+        (OrderHistory.id == id) |
+        (OrderHistory.original_order_id == id) |
+        (OrderHistory.order_number == id)
+    ).first()
+    if not hist:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"History record for order '{id}' not found."
+        )
+    return hist
+
+
+@router.post("/{id}/deliver", response_model=OrderDeliverResponse)
+@router.put("/{id}/deliver", response_model=OrderDeliverResponse)
+@router.get("/{id}/deliver", response_model=OrderDeliverResponse)
+def mark_order_as_delivered(
+    id: str,
+    delivery_info: Optional[OrderDeliveryRequest] = None,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    """
+    Action API: 'Mark as Delivered'.
+    Updates the order status to Delivered, removes it from active orders queue,
+    archives a full immutable snapshot into Order History, and logs the custody audit.
+    """
+    order = db.query(Order).filter((Order.id == id) | (Order.order_number == id)).first()
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Order '{id}' not found."
+        )
+
+    now = datetime.utcnow()
+    delivery_notes = delivery_info.notes if delivery_info and delivery_info.notes else "Customer confirmed delivery at primary receiving dock."
+    delivered_by = (delivery_info.delivered_by if delivery_info and delivery_info.delivered_by else None) or (current_user.name if current_user else "Customer Consignee")
+
+    # 1. Update Order status
+    order.status = "Delivered"
+    order.can_cancel = False
+    order.updated_at = now
+
+    # 2. Serialize items snapshot for immutable history preservation
+    items_snapshot = [
+        {
+            "id": it.id,
+            "productId": it.product_id,
+            "productName": it.product_name,
+            "sku": it.sku,
+            "quantity": it.quantity,
+            "unitPrice": it.unit_price,
+            "gstRate": it.gst_rate,
+            "totalPrice": it.total_price,
+            "image": it.image
+        }
+        for it in order.items
+    ]
+
+    # 3. Insert or update in OrderHistory table
+    history_id = f"hist-{order.id}"
+    existing_hist = db.query(OrderHistory).filter(OrderHistory.id == history_id).first()
+
+    if not existing_hist:
+        history_record = OrderHistory(
+            id=history_id,
+            original_order_id=order.id,
+            order_number=order.order_number,
+            customer_id=order.customer_id,
+            customer_name=order.customer_name,
+            customer_account=order.customer_account,
+            customer_po_reference=order.customer_po_reference,
+            delivery_location=order.delivery_location,
+            logistics_carrier=order.logistics_carrier,
+            payment_terms=order.payment_terms,
+            order_remarks=order.order_remarks,
+            order_date=order.order_date,
+            delivered_at=now,
+            status="Delivered",
+            subtotal=order.subtotal,
+            tax_total=order.tax_total,
+            grand_total=order.grand_total,
+            shipping_address=order.shipping_address,
+            billing_address=order.billing_address,
+            tracking_number=order.tracking_number,
+            invoice_number=order.invoice_number,
+            items_snapshot=items_snapshot,
+            delivered_by=delivered_by,
+            delivery_notes=delivery_notes,
+            created_at=now
+        )
+        db.add(history_record)
+    else:
+        existing_hist.delivered_at = now
+        existing_hist.delivery_notes = delivery_notes
+        existing_hist.delivered_by = delivered_by
+        history_record = existing_hist
+
+    # 4. Log Custody Audit Event
+    audit_entry = AuditEvent(
+        id=f"aud-{int(now.timestamp() * 1000)}",
+        timestamp=now,
+        actor_name=delivered_by,
+        actor_role="CUSTOMER",
+        action="ORDER_DELIVERED",
+        entity_type="Order",
+        entity_id=order.id,
+        details=f"Order {order.order_number} marked as Delivered. Transferred from active queue to Order History. Notes: {delivery_notes}"
+    )
+    db.add(audit_entry)
+
+    db.commit()
+    db.refresh(history_record)
+
+    return OrderDeliverResponse(
+        success=True,
+        message=f"Order #{order.order_number} marked as Delivered, removed from active queue, and archived to Order History.",
+        order_id=order.id,
+        order_number=order.order_number,
+        status="Delivered",
+        delivered_at=now,
+        archived_to_history=True,
+        history_id=history_record.id,
+        history=history_record
+    )
+
+
+@router.delete("/{id}")
+def remove_order(
+    id: str,
+    archive_first: bool = True,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    """
+    Remove an order from the active orders table.
+    If archive_first=True, guarantees an immutable record exists in Order History before deletion.
+    """
+    order = db.query(Order).filter((Order.id == id) | (Order.order_number == id)).first()
+    if not order:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Order '{id}' not found."
+        )
+
+    order_num = order.order_number
+    history_id = f"hist-{order.id}"
+
+    # Ensure archived before removal if requested
+    if archive_first and not db.query(OrderHistory).filter(OrderHistory.id == history_id).first():
+        hist = OrderHistory(
+            id=history_id,
+            original_order_id=order.id,
+            order_number=order.order_number,
+            customer_id=order.customer_id,
+            customer_name=order.customer_name,
+            customer_account=order.customer_account,
+            customer_po_reference=order.customer_po_reference,
+            delivery_location=order.delivery_location,
+            logistics_carrier=order.logistics_carrier,
+            payment_terms=order.payment_terms,
+            order_remarks=order.order_remarks,
+            order_date=order.order_date,
+            delivered_at=datetime.utcnow(),
+            status=order.status if order.status == "Delivered" else "Archived",
+            subtotal=order.subtotal,
+            tax_total=order.tax_total,
+            grand_total=order.grand_total,
+            shipping_address=order.shipping_address,
+            billing_address=order.billing_address,
+            tracking_number=order.tracking_number,
+            invoice_number=order.invoice_number,
+            items_snapshot=[
+                {
+                    "productId": it.product_id,
+                    "productName": it.product_name,
+                    "sku": it.sku,
+                    "quantity": it.quantity,
+                    "unitPrice": it.unit_price,
+                    "totalPrice": it.total_price
+                }
+                for it in order.items
+            ]
+        )
+        db.add(hist)
+
+    db.delete(order)
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"Order #{order_num} has been removed from active orders and safely preserved in Order History.",
+        "historyId": history_id
+    }
 
 
 @router.get("/{id}", response_model=OrderOut)

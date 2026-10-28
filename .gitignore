@@ -25,4 +25,13 @@ pnpm-debug.log*
 .vscode/
 .idea/
 .DS_Store
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+backend/venv/
+backend/.env
+venv/
+.pytest_cache/
+
 Thumbs.db

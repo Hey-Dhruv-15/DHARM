@@ -57,6 +57,7 @@ export const OwnerShipments: React.FC = () => {
   const [destination, setDestination] = useState('BioMed Campus Bay 2');
   const [vendorName, setVendorName] = useState('Apex Industrial Supplies');
   const [customerName, setCustomerName] = useState('Anusha S (BioMed Research)');
+  const [selectedContainerId, setSelectedContainerId] = useState<string>('');
   const [selectedItems, setSelectedItems] = useState<{ productId: string; quantity: number }[]>([
     { productId: products[0]?.id || '', quantity: 12 }
   ]);
@@ -67,6 +68,8 @@ export const OwnerShipments: React.FC = () => {
   const [editDestination, setEditDestination] = useState('');
   const [editVendorName, setEditVendorName] = useState('');
   const [editCustomerName, setEditCustomerName] = useState('');
+  const [editContainerId, setEditContainerId] = useState('');
+  const [editItems, setEditItems] = useState<{ productId: string; quantity: number }[]>([]);
   const [editNotes, setEditNotes] = useState('');
 
   // Fulfillment Workflow Form State
@@ -141,6 +144,13 @@ export const OwnerShipments: React.FC = () => {
     setEditDestination(shipment.destination);
     setEditVendorName(shipment.vendorName);
     setEditCustomerName(shipment.customerName);
+    setEditContainerId(shipment.containerIds[0] || containers[0]?.id || '');
+    setEditItems(
+      shipment.items.map(item => ({
+        productId: item.productId,
+        quantity: item.expectedQuantity
+      }))
+    );
     setEditNotes(shipment.notes || '');
   };
 
@@ -148,6 +158,31 @@ export const OwnerShipments: React.FC = () => {
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingShipment) return;
+
+    const chosenCont =
+      containers.find(c => c.id === editContainerId) ||
+      containers[0] || {
+        id: 'cnt-01',
+        containerNumber: 'CNT-ALPHA-881'
+      };
+
+    const finalItems = editItems.length > 0 ? editItems : [{ productId: products[0]?.id || 'prod-01', quantity: 1 }];
+    const updatedItems: ShipmentItem[] = finalItems.map(item => {
+      const prod = products.find(p => p.id === item.productId) || products[0];
+      const existing = editingShipment.items.find(i => i.productId === item.productId);
+      return {
+        productId: prod?.id || 'prod-01',
+        productName: prod?.name || 'Product',
+        sku: prod?.sku || 'SKU-001',
+        barcode: prod?.barcode || 'BC-001',
+        containerId: chosenCont.id,
+        containerNumber: chosenCont.containerNumber,
+        expectedQuantity: Number(item.quantity) || 1,
+        verifiedQuantity: existing ? existing.verifiedQuantity : 0,
+        scannedQuantity: existing ? existing.scannedQuantity : 0,
+        status: existing ? existing.status : 'Pending'
+      };
+    });
 
     const updatedEvents = [
       ...editingShipment.events,
@@ -157,7 +192,7 @@ export const OwnerShipments: React.FC = () => {
         status: editingShipment.status,
         location: editOrigin,
         performedBy: user?.name || 'Dhruva (Owner)',
-        notes: `Manifest routing and vendor details modified by ${user?.name || 'Dhruva (Owner)'}.`
+        notes: `Manifest routing, line items, and container details updated by ${user?.name || 'Dhruva (Owner)'}.`
       }
     ];
 
@@ -168,6 +203,8 @@ export const OwnerShipments: React.FC = () => {
         destination: editDestination,
         vendorName: editVendorName,
         customerName: editCustomerName,
+        containerIds: [chosenCont.id],
+        items: updatedItems,
         notes: editNotes,
         events: updatedEvents
       },
@@ -269,7 +306,13 @@ export const OwnerShipments: React.FC = () => {
       return;
     }
 
-    const defaultCont = containers[0];
+    const chosenContainer =
+      containers.find(c => c.id === selectedContainerId) ||
+      containers[0] || {
+        id: 'cnt-01',
+        containerNumber: 'CNT-ALPHA-881'
+      };
+
     const items: ShipmentItem[] = selectedItems.map(item => {
       const prod = products.find(p => p.id === item.productId) || products[0];
       return {
@@ -277,16 +320,14 @@ export const OwnerShipments: React.FC = () => {
         productName: prod?.name || 'Product',
         sku: prod?.sku || 'SKU-001',
         barcode: prod?.barcode || 'BC-001',
-        containerId: defaultCont?.id || 'cnt-01',
-        containerNumber: defaultCont?.containerNumber || 'CNT-ALPHA-881',
+        containerId: chosenContainer.id,
+        containerNumber: chosenContainer.containerNumber,
         expectedQuantity: Number(item.quantity) || 1,
         verifiedQuantity: 0,
         scannedQuantity: 0,
         status: 'Pending'
       };
     });
-
-    const uniqueContainerIds = Array.from(new Set(items.map(i => i.containerId).filter(Boolean)));
 
     createShipment(
       {
@@ -295,7 +336,7 @@ export const OwnerShipments: React.FC = () => {
         vendorName,
         customerName,
         items,
-        containerIds: uniqueContainerIds,
+        containerIds: [chosenContainer.id],
         notes
       },
       user?.name || 'Dhruva (Owner)',
@@ -772,56 +813,172 @@ export const OwnerShipments: React.FC = () => {
 
             {/* Form */}
             <form onSubmit={handleSaveEdit} className="p-5 space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-neutral-300 block mb-1">
-                  Origin Location
-                </label>
-                <input
-                  type="text"
-                  value={editOrigin}
-                  onChange={e => setEditOrigin(e.target.value)}
-                  required
-                  className="w-full px-3.5 py-2 bg-black border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-white focus:outline-none"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-neutral-300 block mb-1">
+                    Origin Location
+                  </label>
+                  <input
+                    type="text"
+                    value={editOrigin}
+                    onChange={e => setEditOrigin(e.target.value)}
+                    required
+                    className="w-full px-3.5 py-2 bg-black border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-neutral-300 block mb-1">
+                    Destination Location
+                  </label>
+                  <input
+                    type="text"
+                    value={editDestination}
+                    onChange={e => setEditDestination(e.target.value)}
+                    required
+                    className="w-full px-3.5 py-2 bg-black border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-white focus:outline-none"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-neutral-300 block mb-1">
-                  Destination Location
-                </label>
-                <input
-                  type="text"
-                  value={editDestination}
-                  onChange={e => setEditDestination(e.target.value)}
-                  required
-                  className="w-full px-3.5 py-2 bg-black border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-white focus:outline-none"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-neutral-300 block mb-1">
+                    Assigned Vendor
+                  </label>
+                  <input
+                    type="text"
+                    value={editVendorName}
+                    onChange={e => setEditVendorName(e.target.value)}
+                    required
+                    className="w-full px-3.5 py-2 bg-black border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-neutral-300 block mb-1">
+                    Customer / Recipient
+                  </label>
+                  <input
+                    type="text"
+                    value={editCustomerName}
+                    onChange={e => setEditCustomerName(e.target.value)}
+                    required
+                    className="w-full px-3.5 py-2 bg-black border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-neutral-300 block mb-1">
+                    Transport Container
+                  </label>
+                  <select
+                    value={editContainerId}
+                    onChange={e => setEditContainerId(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-black border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-white focus:outline-none cursor-pointer"
+                  >
+                    {containers.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.containerNumber} ({c.type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-neutral-300 block mb-1">
-                  Assigned Vendor
-                </label>
-                <input
-                  type="text"
-                  value={editVendorName}
-                  onChange={e => setEditVendorName(e.target.value)}
-                  required
-                  className="w-full px-3.5 py-2 bg-black border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-white focus:outline-none"
-                />
-              </div>
+              {/* Edit Manifest Product Lines */}
+              <div className="bg-black p-3.5 rounded-2xl border border-neutral-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-neutral-200">
+                      Manifest Line Items ({editItems.length})
+                    </span>
+                    <p className="text-[11px] text-neutral-400">
+                      Select product and quantity for each line item.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditItems(prev => [
+                        ...prev,
+                        {
+                          productId: products[0]?.id || '',
+                          quantity: 1
+                        }
+                      ])
+                    }
+                    className="text-xs text-indigo-400 hover:text-indigo-300 font-bold transition cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Product Line</span>
+                  </button>
+                </div>
 
-              <div>
-                <label className="text-xs font-semibold text-neutral-300 block mb-1">
-                  Customer / Recipient
-                </label>
-                <input
-                  type="text"
-                  value={editCustomerName}
-                  onChange={e => setEditCustomerName(e.target.value)}
-                  required
-                  className="w-full px-3.5 py-2 bg-black border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-white focus:outline-none"
-                />
+                {/* Column Headers */}
+                <div className="flex items-center gap-2 px-1 text-[11px] font-semibold text-neutral-400">
+                  <span className="flex-1">Select Product</span>
+                  <span className="w-28 text-center">Quantity</span>
+                  <span className="w-8"></span>
+                </div>
+
+                <div className="space-y-2">
+                  {editItems.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 bg-neutral-900/60 p-2.5 rounded-xl border border-neutral-800/80"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <select
+                          value={item.productId}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setEditItems(prev =>
+                              prev.map((it, i) => (i === idx ? { ...it, productId: val } : it))
+                            );
+                          }}
+                          className="w-full bg-black border border-neutral-800 focus:border-indigo-500 rounded-lg p-2 text-xs text-white focus:outline-none cursor-pointer truncate font-medium"
+                        >
+                          <option value="" disabled>Select Product</option>
+                          {products.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.sku} — {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="w-28 shrink-0">
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={e => {
+                            const val = Math.max(1, Number(e.target.value) || 1);
+                            setEditItems(prev =>
+                              prev.map((it, i) => (i === idx ? { ...it, quantity: val } : it))
+                            );
+                          }}
+                          className="w-full bg-black border border-neutral-800 focus:border-indigo-500 rounded-lg p-2 text-xs text-white text-center focus:outline-none font-mono font-bold"
+                          placeholder="Quantity"
+                        />
+                      </div>
+
+                      {editItems.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => setEditItems(prev => prev.filter((_, i) => i !== idx))}
+                          className="w-8 h-8 rounded-lg bg-neutral-900 hover:bg-rose-950/60 text-neutral-400 hover:text-rose-400 flex items-center justify-center text-xs font-bold transition cursor-pointer shrink-0"
+                          title="Remove line"
+                        >
+                          ✕
+                        </button>
+                      ) : (
+                        <div className="w-8" />
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -1089,7 +1246,7 @@ export const OwnerShipments: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-neutral-300 block mb-1">
                     Assigned Vendor
@@ -1114,29 +1271,58 @@ export const OwnerShipments: React.FC = () => {
                     className="w-full px-3.5 py-2 bg-black border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-white focus:outline-none"
                   />
                 </div>
+                <div>
+                  <label className="text-xs font-semibold text-neutral-300 block mb-1">
+                    Transport Container
+                  </label>
+                  <select
+                    value={selectedContainerId || containers[0]?.id || ''}
+                    onChange={e => setSelectedContainerId(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-black border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-white focus:outline-none cursor-pointer"
+                  >
+                    {containers.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.containerNumber} ({c.type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Product Lines */}
               <div className="bg-black p-3.5 rounded-2xl border border-neutral-800 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-neutral-200">
-                    Manifest Line Items ({selectedItems.length})
-                  </span>
+                  <div>
+                    <span className="text-xs font-bold text-neutral-200">
+                      Manifest Line Items ({selectedItems.length})
+                    </span>
+                    <p className="text-[11px] text-neutral-400">
+                      Select product and quantity for each line item.
+                    </p>
+                  </div>
                   <button
                     type="button"
                     onClick={() =>
                       setSelectedItems(prev => [
                         ...prev,
                         {
-                          productId: products[0]?.id || '',
-                          quantity: 5
+                          productId: '',
+                          quantity: 1
                         }
                       ])
                     }
-                    className="text-xs text-indigo-400 hover:text-indigo-300 font-bold transition cursor-pointer"
+                    className="text-xs text-indigo-400 hover:text-indigo-300 font-bold transition cursor-pointer flex items-center gap-1"
                   >
-                    + Add Product Line
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Product Line</span>
                   </button>
+                </div>
+
+                {/* Column Headers */}
+                <div className="flex items-center gap-2 px-1 text-[11px] font-semibold text-neutral-400">
+                  <span className="flex-1">Select Product</span>
+                  <span className="w-28 text-center">Quantity</span>
+                  <span className="w-8"></span>
                 </div>
 
                 <div className="space-y-2">
@@ -1157,6 +1343,7 @@ export const OwnerShipments: React.FC = () => {
                           }}
                           className="w-full bg-black border border-neutral-800 focus:border-indigo-500 rounded-lg p-2 text-xs text-white focus:outline-none cursor-pointer truncate font-medium"
                         >
+                          <option value="" disabled>Select Product</option>
                           {products.map(p => (
                             <option key={p.id} value={p.id}>
                               {p.sku} — {p.name}
@@ -1166,24 +1353,24 @@ export const OwnerShipments: React.FC = () => {
                       </div>
 
                       {/* Quantity Input */}
-                      <div className="w-24 shrink-0">
+                      <div className="w-28 shrink-0">
                         <input
                           type="number"
                           min="1"
                           value={item.quantity}
                           onChange={e => {
-                            const val = Math.max(1, Number(e.target.value));
+                            const val = Math.max(1, Number(e.target.value) || 1);
                             setSelectedItems(prev =>
                               prev.map((it, i) => (i === idx ? { ...it, quantity: val } : it))
                             );
                           }}
                           className="w-full bg-black border border-neutral-800 focus:border-indigo-500 rounded-lg p-2 text-xs text-white text-center focus:outline-none font-mono font-bold"
-                          placeholder="Qty"
+                          placeholder="Quantity"
                         />
                       </div>
 
                       {/* Remove Line Button */}
-                      {selectedItems.length > 1 && (
+                      {selectedItems.length > 1 ? (
                         <button
                           type="button"
                           onClick={() => setSelectedItems(prev => prev.filter((_, i) => i !== idx))}
@@ -1192,6 +1379,8 @@ export const OwnerShipments: React.FC = () => {
                         >
                           ✕
                         </button>
+                      ) : (
+                        <div className="w-8" />
                       )}
                     </div>
                   ))}

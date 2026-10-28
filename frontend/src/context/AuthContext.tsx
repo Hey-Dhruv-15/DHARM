@@ -24,7 +24,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return null;
       }
     }
-    // Default to Owner if needed or null for login page
     return null;
   });
 
@@ -37,11 +36,73 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user]);
 
   const login = async (email: string, pass: string): Promise<{ success: boolean; error?: string; user?: User }> => {
-    // Artificial small delay for realistic UX
-    await new Promise(r => setTimeout(r, 450));
-
     const normalizedEmail = email.trim().toLowerCase();
     const cleanPass = pass.trim();
+
+    // 1. Authenticate with real localhost FastAPI backend API (/api/auth/login)
+    try {
+      const endpoints = [
+        '/api/auth/login',
+        'http://localhost:8000/api/auth/login',
+        'http://127.0.0.1:8000/api/auth/login'
+      ];
+
+      for (const endpoint of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 2500);
+
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              email: normalizedEmail,
+              password: cleanPass
+            }),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.access_token) {
+              localStorage.setItem('dharm_access_token', data.access_token);
+            }
+            if (data.user) {
+              const roleStr = (data.user.role?.toUpperCase() || 'OWNER') as UserRole;
+              const u: User = {
+                id: data.user.id || 'usr-owner-01',
+                name: data.user.name,
+                email: data.user.email,
+                role: roleStr,
+                organization: data.user.organization || 'Apex Global Logistics & Medical Supply',
+                location: data.user.location || 'Central Distribution Center, Hub Alpha',
+                avatar: data.user.avatar || (roleStr === 'OWNER' ? '👑' : roleStr === 'VENDOR' ? '🏢' : '👤')
+              };
+              setUser(u);
+              return { success: true, user: u };
+            }
+          } else if (response.status === 401 || response.status === 422) {
+            const errJson = await response.json().catch(() => null);
+            return {
+              success: false,
+              error: errJson?.detail || 'Invalid email or password'
+            };
+          }
+        } catch {
+          // Try next endpoint candidate
+          continue;
+        }
+      }
+    } catch (e) {
+      console.warn('API connection fallback active:', e);
+    }
+
+    // 2. Resilient demo fallback if localhost:8000 backend is not started
+    await new Promise(r => setTimeout(r, 200));
 
     if (cleanPass.toLowerCase() !== 'dharam@123') {
       return { success: false, error: 'Invalid password. Hint: default demo password is Dharam@123' };
@@ -91,11 +152,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return {
       success: false,
-      error: 'Account not recognized. Please use one of the registered role accounts (Owner, Vendor, Customer).'
+      error: 'Account not recognized. Please use registered account (hey.dhruvs20@gmail.com, Sinugunshetty@gmail.com, or anusha.s2028@gmail.com).'
     };
   };
 
   const logout = () => {
+    localStorage.removeItem('dharm_access_token');
+    localStorage.removeItem('dharm_auth_user');
     setUser(null);
   };
 

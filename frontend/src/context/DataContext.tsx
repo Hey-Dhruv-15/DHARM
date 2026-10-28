@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect } from 'react';
 import type {
   Product,
   Container,
@@ -24,6 +24,7 @@ import {
   CustomerBackendService,
   type DiscrepancySubmissionInput
 } from '../services/customerApi';
+import { productApi } from '../services/productApi';
 import {
   INITIAL_PRODUCTS,
   INITIAL_CONTAINERS,
@@ -297,6 +298,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Sync initial returns & discrepancies from backend
   useEffect(() => {
+    // Sync master products from backend REST API (GET /api/products)
+    productApi.listProducts()
+      .then(apiProducts => {
+        if (Array.isArray(apiProducts) && apiProducts.length > 0) {
+          setProducts(prev => {
+            const apiIds = new Set(apiProducts.map(p => p.id));
+            const remain = prev.filter(p => !apiIds.has(p.id));
+            return [...apiProducts, ...remain];
+          });
+        }
+      })
+      .catch(err => console.debug('Notice fetching products from API:', err));
+
     fetch('http://localhost:8000/api/returns')
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
@@ -424,6 +438,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setProducts(prev => [newProd, ...prev]);
     logAudit(actorName, role, 'PRODUCT_REGISTERED', 'Product', newProd.id, `Registered SKU: ${newProd.sku} (${newProd.name}) with stock: ${newProd.stockQuantity}`);
+
+    // Call backend REST API (POST /api/products)
+    productApi.createProduct(newProd)
+      .then(saved => {
+        if (saved && saved.id) {
+          setProducts(prev => prev.map(p => p.id === newProd.id ? saved : p));
+        }
+      })
+      .catch(err => console.warn('Notice syncing product to backend POST /api/products:', err));
+
     return newProd;
   };
 
@@ -437,6 +461,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map(p => (p.id === id ? { ...p, ...updates } : p))
     );
     logAudit(actorName, role, 'PRODUCT_REGISTERED', 'Product', id, `Updated product catalog details for SKU: ${updates.sku || id}`);
+
+    // Call backend REST API (PUT /api/products/{id})
+    productApi.updateProduct(id, updates).catch(err => console.warn('Notice syncing product update to backend PUT /api/products:', err));
   };
 
   const deleteProduct = (
@@ -446,6 +473,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ) => {
     setProducts(prev => prev.filter(p => p.id !== id));
     logAudit(actorName, role, 'PRODUCT_REGISTERED', 'Product', id, `Archived/Removed product catalog ID: ${id}`);
+
+    // Call backend REST API (DELETE /api/products/{id})
+    productApi.deleteProduct(id).catch(err => console.warn('Notice syncing product deletion to backend DELETE /api/products:', err));
   };
 
   const createContainer = (

@@ -85,7 +85,7 @@ export const OwnerContainers: React.FC = () => {
   // Dropdown menu state for cards
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
-  // 1. Container Information Form State
+  // Container Information Form State
   const [containerNumber, setContainerNumber] = useState('');
   const [containerType, setContainerType] = useState<ContainerType>('Cold-Chain Bin');
   const [maxCapacity, setMaxCapacity] = useState<number>(150);
@@ -731,10 +731,10 @@ export const OwnerContainers: React.FC = () => {
               <div>
                 <h3 className="text-base sm:text-lg font-extrabold text-white tracking-tight flex items-center gap-2">
                   <Archive className="w-5 h-5 text-indigo-400" />
-                  <span>Provision New Container & Scan Products</span>
+                  <span>Provision New Container</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Configure container parameters and continuously scan product barcodes with OpenCV.
+                  Configure container parameters and assign security seal.
                 </p>
               </div>
 
@@ -753,7 +753,7 @@ export const OwnerContainers: React.FC = () => {
               <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800 space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
-                    <span>1. Container Information</span>
+                    <span>Container Information</span>
                   </h4>
                   <button
                     type="button"
@@ -876,199 +876,6 @@ export const OwnerContainers: React.FC = () => {
                     placeholder="Temperature control specifics, hazardous handling notes, or route requirements..."
                     className="w-full px-3.5 py-2 text-xs sm:text-sm bg-slate-900 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 resize-y"
                   />
-                </div>
-              </div>
-
-              {/* SECTION 2: SCAN PRODUCTS (OPENCV CONTINUOUS BARCODE SCANNER) */}
-              <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
-                    <span>2. Scan Products</span>
-                  </h4>
-
-                  {/* Live Capacity Utilized Bar */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono font-bold text-slate-300">
-                      Utilized: {currentUtilizedCapacity.toFixed(1)} / {maxCapacity} {capacityUnit} ({utilizedPercent}%)
-                    </span>
-                  </div>
-                </div>
-
-                {/* Capacity Progress Bar */}
-                <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-300 ${
-                      utilizedPercent >= 100
-                        ? 'bg-rose-500'
-                        : utilizedPercent > 80
-                        ? 'bg-amber-400'
-                        : 'bg-indigo-500'
-                    }`}
-                    style={{ width: `${utilizedPercent}%` }}
-                  />
-                </div>
-
-                {/* Capacity Validation Error Banner */}
-                {capacityError && (
-                  <div className="p-3 bg-rose-950/80 border border-rose-800 rounded-xl text-xs text-rose-300 flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                    <span>{capacityError}</span>
-                  </div>
-                )}
-
-                {/* The OpenCV Barcode Scanner Component */}
-                <OpenCvBarcodeScanner
-                  onScan={handleBarcodeScan}
-                  isScanning={isScanning}
-                  onToggleScanning={setIsScanning}
-                  simulationProducts={simulationProducts}
-                />
-
-                {/* Scanned Products List Table (With "remove in UI please :>") */}
-                <div className="space-y-3 pt-3 border-t border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                      <Package className="w-4 h-4 text-indigo-400" />
-                      <span>Scanned Products List ({scannedItems.length} lines • {currentTotalUnits} units)</span>
-                    </div>
-
-                    {scannedItems.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setScannedItems([])}
-                        className="text-xs text-rose-400 hover:text-rose-300 font-semibold cursor-pointer"
-                      >
-                        Clear All
-                      </button>
-                    )}
-                  </div>
-
-                  {scannedItems.length === 0 ? (
-                    <div className="p-6 text-center rounded-xl border border-dashed border-slate-800 bg-slate-900/40 text-slate-400 text-xs">
-                      No products scanned yet. Point your camera at product barcodes above or enter barcode numbers.
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/60">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800 font-bold">
-                          <tr>
-                            <th className="px-3.5 py-2.5">Product Name</th>
-                            <th className="px-3.5 py-2.5">SKU / Barcode</th>
-                            <th className="px-3.5 py-2.5 text-center">Quantity</th>
-                            <th className="px-3.5 py-2.5 text-right">Weight ({capacityUnit})</th>
-                            <th className="px-3.5 py-2.5 text-center">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800">
-                          {scannedItems.map(item => (
-                            <tr key={item.productId} className="hover:bg-slate-800/40 transition">
-                              <td className="px-3.5 py-2.5 font-bold text-white">
-                                {item.productName}
-                              </td>
-                              <td className="px-3.5 py-2.5 font-mono text-slate-400 text-[11px]">
-                                {item.sku}
-                                <span className="block text-[10px] text-slate-500 font-mono">
-                                  {item.barcode}
-                                </span>
-                              </td>
-                              <td className="px-3.5 py-2.5">
-                                <div className="flex items-center justify-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAdjustQuantity(item.productId, -1)}
-                                    className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition cursor-pointer"
-                                    title="Decrease quantity"
-                                  >
-                                    -
-                                  </button>
-                                  <span className="font-mono font-bold text-white min-w-[20px] text-center">
-                                    {item.quantity}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAdjustQuantity(item.productId, 1)}
-                                    className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition cursor-pointer"
-                                    title="Increase quantity"
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              </td>
-                              <td className="px-3.5 py-2.5 text-right font-mono font-bold text-white">
-                                {item.totalWeight.toFixed(1)} {capacityUnit}
-                                <span className="block text-[10px] text-slate-500 font-normal">
-                                  {item.unitWeight} {capacityUnit}/ea
-                                </span>
-                              </td>
-                              {/* Remove in UI Action button ("remove in UI please :>") */}
-                              <td className="px-3.5 py-2.5 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveScannedItem(item.productId)}
-                                  className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-950/80 border border-transparent hover:border-rose-800 transition cursor-pointer"
-                                  title="Remove product from container"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* SECTION 3: SYSTEM-GENERATED FIELDS */}
-              <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800 space-y-3">
-                <h4 className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
-                  <Info className="w-4 h-4 text-indigo-400" />
-                  <span>3. System-Generated Fields</span>
-                </h4>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10.5px] text-slate-400 font-medium block">Container ID</span>
-                    <span className="font-mono font-bold text-indigo-400">
-                      Auto-generated
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10.5px] text-slate-400 font-medium block">Status</span>
-                    <span className="font-bold text-emerald-400">
-                      Active
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10.5px] text-slate-400 font-medium block">Utilized Capacity</span>
-                    <span className="font-mono font-bold text-white">
-                      {currentUtilizedCapacity.toFixed(1)} {capacityUnit}
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10.5px] text-slate-400 font-medium block">Assigned Shipment</span>
-                    <span className="font-mono font-semibold text-slate-300">
-                      Unassigned
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10.5px] text-slate-400 font-medium block">Created At</span>
-                    <span className="font-semibold text-slate-300">
-                      Automatic (Current Time)
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10.5px] text-slate-400 font-medium block">Created By</span>
-                    <span className="font-bold text-white truncate block">
-                      {user?.name || 'Dhruva (Owner)'}
-                    </span>
-                  </div>
                 </div>
               </div>
 

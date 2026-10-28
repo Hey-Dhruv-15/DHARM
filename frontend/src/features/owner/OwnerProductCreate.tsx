@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Check, AlertCircle } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
+import { productApi } from '../../services/productApi';
 import type { Product } from '../../types';
 
 interface OwnerProductCreateProps {
@@ -39,6 +40,7 @@ export const OwnerProductCreate: React.FC<OwnerProductCreateProps> = ({
     existingProduct?.deliverables || existingProduct?.description || ''
   );
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Sync if editing an existing product
   useEffect(() => {
@@ -51,8 +53,23 @@ export const OwnerProductCreate: React.FC<OwnerProductCreateProps> = ({
       setListPrice(String(existingProduct.unitPrice ?? ''));
       setGstRate(String(existingProduct.gstRate ?? '18'));
       setDeliverables(existingProduct.deliverables || existingProduct.description || '');
+    } else if (productIdToEdit) {
+      productApi.getProduct(productIdToEdit)
+        .then(p => {
+          if (p) {
+            setName(p.name || '');
+            setSku(p.sku || '');
+            setCategory(p.category || '');
+            setBillingUnit(p.billingUnit || '');
+            setCurrency(p.currency || 'INR');
+            setListPrice(String(p.unitPrice ?? ''));
+            setGstRate(String(p.gstRate ?? '18'));
+            setDeliverables(p.deliverables || p.description || '');
+          }
+        })
+        .catch(err => console.debug('Notice fetching product to edit from API:', err));
     }
-  }, [existingProduct]);
+  }, [existingProduct, productIdToEdit]);
 
   // Pricing calculations
   const parsedPrice = parseFloat(listPrice) || 0;
@@ -76,7 +93,7 @@ export const OwnerProductCreate: React.FC<OwnerProductCreateProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -93,70 +110,73 @@ export const OwnerProductCreate: React.FC<OwnerProductCreateProps> = ({
     const assignedBilling = billingUnit.trim() || 'One-time';
     const finalBarcode = existingProduct?.barcode || `BC-${sku.replace(/[^A-Za-z0-9]/g, '').toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    if (existingProduct) {
-      updateProduct(
-        existingProduct.id,
-        {
-          name: name.trim(),
-          sku: sku.trim().toUpperCase(),
-          category: assignedCategory,
-          billingUnit: assignedBilling,
-          currency,
-          unitPrice: parsedPrice,
-          gstRate: parsedGst,
-          grossPrice: grossPrice,
-          deliverables: deliverables.trim(),
-          description: deliverables.trim() || existingProduct.description,
-          barcode: finalBarcode
-        },
-        user?.name || 'Dhruva (Owner)',
-        role || 'OWNER'
-      );
-    } else {
-      addProduct(
-        {
-          name: name.trim(),
-          sku: sku.trim().toUpperCase(),
-          category: assignedCategory,
-          billingUnit: assignedBilling,
-          currency,
-          unitPrice: parsedPrice,
-          gstRate: parsedGst,
-          grossPrice: grossPrice,
-          unit: 'Unit',
-          barcode: finalBarcode,
-          isSerialized: true,
-          stockQuantity: 25,
-          reorderLevel: 5,
-          status: 'Active',
-          deliverables: deliverables.trim(),
-          description: deliverables.trim() || `${name.trim()} - Master Catalog Item`
-        },
-        user?.name || 'Dhruva (Owner)',
-        role || 'OWNER'
-      );
+    setIsSubmitting(true);
+    try {
+      if (existingProduct) {
+        updateProduct(
+          existingProduct.id,
+          {
+            name: name.trim(),
+            sku: sku.trim().toUpperCase(),
+            category: assignedCategory,
+            billingUnit: assignedBilling,
+            currency,
+            unitPrice: parsedPrice,
+            gstRate: parsedGst,
+            grossPrice: grossPrice,
+            deliverables: deliverables.trim(),
+            description: deliverables.trim() || existingProduct.description,
+            barcode: finalBarcode
+          },
+          user?.name || 'Dhruva (Owner)',
+          role || 'OWNER'
+        );
+      } else {
+        addProduct(
+          {
+            name: name.trim(),
+            sku: sku.trim().toUpperCase(),
+            category: assignedCategory,
+            billingUnit: assignedBilling,
+            currency,
+            unitPrice: parsedPrice,
+            gstRate: parsedGst,
+            grossPrice: grossPrice,
+            unit: 'Unit',
+            barcode: finalBarcode,
+            isSerialized: true,
+            stockQuantity: 25,
+            reorderLevel: 5,
+            status: 'Active',
+            deliverables: deliverables.trim(),
+            description: deliverables.trim() || `${name.trim()} - Master Catalog Item`
+          },
+          user?.name || 'Dhruva (Owner)',
+          role || 'OWNER'
+        );
+      }
+      handleBack();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to save product to catalog.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    handleBack();
   };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
       {/* Top Breadcrumb Navigation */}
-      <div>
-        <button
-          type="button"
-          onClick={handleBack}
-          className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-blue-600 hover:text-blue-800 transition cursor-pointer"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Products Catalog</span>
-        </button>
-      </div>
+      <button
+        onClick={handleBack}
+        className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-blue-600 hover:text-blue-800 transition cursor-pointer"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span>Back to Products Catalog</span>
+      </button>
 
       {error && (
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-700 text-xs sm:text-sm font-medium">
+          <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
           <span>{error}</span>
         </div>
       )}
@@ -164,15 +184,18 @@ export const OwnerProductCreate: React.FC<OwnerProductCreateProps> = ({
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* SECTION 1: Product Identification & Classification */}
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 sm:p-7 space-y-5">
-          <h3 className="text-xs sm:text-sm font-bold text-slate-900 tracking-tight">
-            1. Product Identification & Classification
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 tracking-tight">
+              1. Product Identification & Classification
+            </h3>
+            <span className="text-[10px] text-slate-400 font-mono">REST: POST /api/products</span>
+          </div>
 
-          {/* Row 1: Product Name & SKU */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Product / Service Name */}
             <div>
               <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
-                PRODUCT / SERVICE NAME <span className="text-rose-500">*</span>
+                PRODUCT / SERVICE NAME <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -184,101 +207,78 @@ export const OwnerProductCreate: React.FC<OwnerProductCreateProps> = ({
               />
             </div>
 
+            {/* SKU */}
             <div>
               <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
-                SKU (STOCK KEEPING UNIT) <span className="text-rose-500">*</span>
+                SKU (STOCK KEEPING UNIT) <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 required
                 value={sku}
                 onChange={e => setSku(e.target.value)}
-                placeholder="e.g. SEC-SHIELD-ENT"
-                className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-mono uppercase bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                placeholder="E.G. SEC-SHIELD-ENT"
+                className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 uppercase font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
               />
             </div>
           </div>
 
-          {/* Row 2: Category & Billing Frequency */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
+            {/* Category Dropdown */}
             <div>
               <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
                 PRODUCT CATEGORY
               </label>
-              <div className="relative">
-                <select
-                  value={category}
-                  onChange={e => setCategory(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition pr-10 cursor-pointer"
-                >
-                  <option value="">Select Category</option>
-                  <option value="Enterprise Software & SaaS">Enterprise Software & SaaS</option>
-                  <option value="AI, ML & Data Intelligence">AI, ML & Data Intelligence</option>
-                  <option value="Cloud Infrastructure & DevOps">Cloud Infrastructure & DevOps</option>
-                  <option value="IT Services">IT Services</option>
-                  <option value="General / Uncategorized">General / Uncategorized</option>
-                  <option value="Cold-Chain Hardware">Cold-Chain Hardware</option>
-                  <option value="Laboratory Electronics">Laboratory Electronics</option>
-                  <option value="Biologics">Biologics</option>
-                  <option value="Consumables">Consumables</option>
-                  <option value="Telematics">Telematics</option>
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-400">
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
-                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                  </svg>
-                </div>
-              </div>
+              <select
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition cursor-pointer"
+              >
+                <option value="">Select Category</option>
+                <option value="General / Uncategorized">General / Uncategorized</option>
+                <option value="Enterprise Software & SaaS">Enterprise Software & SaaS</option>
+                <option value="AI, ML & Data Intelligence">AI, ML & Data Intelligence</option>
+                <option value="Medical Cold-Chain Equipment">Medical Cold-Chain Equipment</option>
+                <option value="Logistics Hardware & IoT">Logistics Hardware & IoT</option>
+                <option value="Tamper-Evident Packaging">Tamper-Evident Packaging</option>
+              </select>
             </div>
 
+            {/* Billing Frequency / Unit */}
             <div>
               <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
                 BILLING FREQUENCY / UNIT
               </label>
-              <div className="relative">
-                <select
-                  value={billingUnit}
-                  onChange={e => setBillingUnit(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition pr-10 cursor-pointer"
-                >
-                  <option value="">Select Billing Frequency</option>
-                  <option value="One-time">One-time</option>
-                  <option value="One-time / Per Unit">One-time / Per Unit</option>
-                  <option value="Monthly Subscription">Monthly Subscription</option>
-                  <option value="Monthly">Monthly</option>
-                  <option value="quarterly">Quarterly</option>
-                  <option value="Annual">Annual</option>
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-400">
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
-                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                  </svg>
-                </div>
-              </div>
+              <select
+                value={billingUnit}
+                onChange={e => setBillingUnit(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition cursor-pointer"
+              >
+                <option value="">Select Billing Frequency</option>
+                <option value="One-time">One-time</option>
+                <option value="One-time / Per Unit">One-time / Per Unit</option>
+                <option value="Monthly Subscription">Monthly Subscription</option>
+                <option value="quarterly">quarterly</option>
+                <option value="Annual License">Annual License</option>
+              </select>
             </div>
           </div>
 
-          {/* Row 3: Currency */}
-          <div>
+          {/* Currency Dropdown */}
+          <div className="pt-1">
             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
               CURRENCY
             </label>
-            <div className="relative">
-              <select
-                value={currency}
-                onChange={e => setCurrency(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition pr-10 cursor-pointer"
-              >
-                <option value="INR">INR - Indian Rupee (₹)</option>
-                <option value="USD">USD - US Dollar ($)</option>
-                <option value="EUR">EUR - Euro (€)</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-400">
-                <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
-                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                </svg>
-              </div>
-            </div>
+            <select
+              value={currency}
+              onChange={e => setCurrency(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition cursor-pointer"
+            >
+              <option value="INR">INR - Indian Rupee (₹)</option>
+              <option value="USD">USD - United States Dollar ($)</option>
+              <option value="EUR">EUR - Euro (€)</option>
+              <option value="GBP">GBP - British Pound (£)</option>
+            </select>
           </div>
         </div>
 
@@ -288,24 +288,25 @@ export const OwnerProductCreate: React.FC<OwnerProductCreateProps> = ({
             2. Pricing & GST Structure
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* List Price */}
             <div>
               <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
-                LIST PRICE (EXCL. TAX) <span className="text-rose-500">*</span>
+                LIST PRICE (EXCL. TAX) <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-500 font-semibold text-sm">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
                   ₹
-                </div>
+                </span>
                 <input
                   type="number"
                   step="any"
                   min="0"
+                  required
                   value={listPrice}
                   onChange={e => setListPrice(e.target.value)}
                   placeholder="0.00"
-                  className="w-full pl-8 pr-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition font-mono"
+                  className="w-full pl-8 pr-3.5 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-900 font-mono placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
                 />
               </div>
               <p className="text-[11px] text-slate-400 mt-1.5 font-normal">
@@ -327,11 +328,11 @@ export const OwnerProductCreate: React.FC<OwnerProductCreateProps> = ({
                   value={gstRate}
                   onChange={e => setGstRate(e.target.value)}
                   placeholder="18"
-                  className="w-full pl-3.5 pr-8 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition font-mono"
+                  className="w-full px-3.5 pr-8 py-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl text-slate-900 font-mono placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
                 />
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 font-semibold text-sm">
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">
                   %
-                </div>
+                </span>
               </div>
               <p className="text-[11px] text-slate-400 mt-1.5 font-normal">
                 Applicable GST percentage (e.g. 18).
@@ -387,10 +388,11 @@ export const OwnerProductCreate: React.FC<OwnerProductCreateProps> = ({
           </button>
           <button
             type="submit"
-            className="px-6 py-2.5 text-xs sm:text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+            disabled={isSubmitting}
+            className="px-6 py-2.5 text-xs sm:text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
           >
             <Check className="w-4 h-4 stroke-[2.5]" />
-            <span>Save Product</span>
+            <span>{isSubmitting ? 'Saving...' : 'Save Product'}</span>
           </button>
         </div>
       </form>

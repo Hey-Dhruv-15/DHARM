@@ -87,6 +87,27 @@ class ReturnClaimCreate(BaseModel):
         populate_by_name = True
 
 
+class CustomerDamagedClaimCreate(BaseModel):
+    """Payload representing 'Log Customer Damaged Product Claim' modal form in Exception & Damage module"""
+    shipment_id: Optional[str] = Field(default=None, alias="shipmentId")
+    tracking_number: Optional[str] = Field(default=None, alias="trackingNumber")
+    product_id: Optional[str] = Field(default=None, alias="productId")
+    sku: Optional[str] = Field(default=None, alias="sku")
+    product_name: Optional[str] = Field(default=None, alias="productName")
+    customer_name: Optional[str] = Field(default="Anusha S (BioMed Research Campus)", alias="customerName")
+    customer_id: Optional[str] = Field(default="usr-cust-03", alias="customerId")
+    reason: str = Field(default="Damaged in Transit", alias="reason")
+    customer_choice: str = Field(default="Replace Product", alias="customerChoice")
+    notes: Optional[str] = Field(default=None, alias="notes")
+    description: Optional[str] = Field(default=None, alias="description")
+    refund_amount: Optional[float] = Field(default=None, alias="refundAmount")
+    quarantine_location: Optional[str] = Field(default="Vendor Hub Quarantine Bay Q-4B", alias="quarantineLocation")
+    evidence_photos: List[str] = Field(default=[], alias="evidencePhotos")
+
+    class Config:
+        populate_by_name = True
+
+
 class ReturnVerifyRequest(BaseModel):
     diagnosis: str
     notes: Optional[str] = None
@@ -111,6 +132,16 @@ class ReturnResolveRequest(BaseModel):
 class ReturnClaimResponse(BaseModel):
     success: bool = True
     message: str = "Claim successfully logged in Owner Returns and Vendor Exceptions & Damaged modules"
+    return_case: ReturnCaseOut = Field(..., alias="returnCase")
+    discrepancy_case: Optional[DiscrepancyOut] = Field(default=None, alias="discrepancyCase")
+
+    class Config:
+        populate_by_name = True
+
+
+class CustomerDamagedClaimResponse(BaseModel):
+    success: bool = True
+    message: str = "Customer damaged product claim logged and isolated in Vendor Hub Quarantine Bay Q-4B."
     return_case: ReturnCaseOut = Field(..., alias="returnCase")
     discrepancy_case: Optional[DiscrepancyOut] = Field(default=None, alias="discrepancyCase")
 

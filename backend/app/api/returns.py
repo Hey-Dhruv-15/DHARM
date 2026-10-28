@@ -12,6 +12,7 @@ from app.models.audit import AuditEvent
 from app.schemas.return_case import (
     ReturnCaseCreate, ReturnCaseUpdate, ReturnCaseOut,
     ReturnClaimCreate, ReturnClaimResponse,
+    CustomerDamagedClaimCreate, CustomerDamagedClaimResponse,
     ReturnVerifyRequest, ReturnResolveRequest
 )
 
@@ -43,12 +44,164 @@ def list_returns(
     return query.order_by(ReturnCase.requested_at.desc()).all()
 
 
+@router.get("/customer-damaged", response_model=List[ReturnCaseOut])
+def list_customer_damaged(
+    search: Optional[str] = Query(default=None),
+    choice: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db)
+):
+    """
+    List view API for Customer Damaged Product Claims & Resolution (Exception & Damage module 2nd screen).
+    """
+    query = db.query(ReturnCase)
+    if isinstance(status, str) and status != "ALL":
+        query = query.filter(ReturnCase.status == status)
+    if isinstance(choice, str) and choice != "ALL":
+        query = query.filter(ReturnCase.customer_choice.ilike(f"%{choice}%"))
+    if isinstance(search, str) and search.strip():
+        term = f"%{search.strip()}%"
+        query = query.filter(
+            (ReturnCase.return_number.ilike(term)) |
+            (ReturnCase.customer_name.ilike(term)) |
+            (ReturnCase.product_name.ilike(term)) |
+            (ReturnCase.sku.ilike(term)) |
+            (ReturnCase.tracking_number.ilike(term))
+        )
+    return query.order_by(ReturnCase.requested_at.desc()).all()
+
+
 @router.get("/{return_id}", response_model=ReturnCaseOut)
 def get_return(return_id: str, db: Session = Depends(get_db)):
     ret = db.query(ReturnCase).filter(ReturnCase.id == return_id).first()
     if not ret:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Return case not found.")
     return ret
+
+
+@router.post("/customer-damaged", response_model=CustomerDamagedClaimResponse, status_code=status.HTTP_201_CREATED)
+def log_customer_damaged_claim(claim_in: CustomerDamagedClaimCreate, db: Session = Depends(get_db)):
+    """
+    Primary API for 'Log Customer Damaged Product Claim' modal (Exception and Damage module - 2nd screen).
+    Fields:
+    - Affected Shipment (shipmentId / trackingNumber)
+    - Product SKU (sku / productId / productName)
+    - Customer Organization / Name (customerName / customerId)
+    - Problem Reason (reason: Damaged in Transit, etc.)
+    - Customer Desired Resolution Choice (customerChoice: Replace Product vs Refund Amount)
+    - Problem Description & Initial Notes (notes / description)
+    - Quarantine Location (quarantineLocation: default 'Vendor Hub Quarantine Bay Q-4B')
+    """
+    rand_suffix = random.randint(100, 999)
+    ret_id = f"ret-{uuid.uuid4().hex[:8]}"
+    ret_number = f"RET-2026-{rand_suffix}"
+    disc_id = f"dsc-{uuid.uuid4().hex[:8]}"
+    disc_number = f"DSC-2026-{rand_suffix}"
+
+    shipment_ref = claim_in.shipment_id or "shp-2026-001"
+    tracking_ref = claim_in.tracking_number or (shipment_ref if shipment_ref.startswith("TRK-") else "TRK-DHM-884920")
+    prod_id = claim_in.product_id or claim_in.sku or "GEN-SAS-001"
+    sku = claim_in.sku or "GEN-SAS-001"
+    prod_name = claim_in.product_name or "SASAS (Copy)"
+    cust_id = claim_in.customer_id or "usr-cust-03"
+    cust_name = claim_in.customer_name or "Anusha S (BioMed Research Campus)"
+    notes_text = claim_in.notes or claim_in.description or "Customer damaged product claim registered at vendor reception."
+    quarantine_loc = claim_in.quarantine_location or "Vendor Hub Quarantine Bay Q-4B"
+
+    # 1. Create ReturnCase
+    new_return = ReturnCase(
+        id=ret_id,
+        return_number=ret_number,
+        original_shipment_id=shipment_ref,
+        tracking_number=tracking_ref,
+        customer_id=cust_id,
+        customer_name=cust_name,
+        product_id=prod_id,
+        product_name=prod_name,
+        sku=sku,
+        quantity=1,
+        reason=claim_in.reason,
+        status="Received at Hub",
+        evidence_photos=claim_in.evidence_photos or ["/dharm_logistics_hero.jpg"],
+        inspection_notes=notes_text,
+        quarantine_location=quarantine_loc,
+        customer_choice=claim_in.customer_choice,
+        vendor_verified=False,
+        problem_diagnosis=f"Customer reported: {claim_in.reason}. Initial notes: {notes_text}",
+        refund_amount=claim_in.refund_amount if claim_in.customer_choice == "Refund Amount" else None,
+        refund_status="Pending" if claim_in.customer_choice == "Refund Amount" else None,
+        requested_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    db.add(new_return)
+
+    # 2. Create matching DiscrepancyCase for vendor dock tracking
+    new_disc = DiscrepancyCase(
+        id=disc_id,
+        discrepancy_number=disc_number,
+        shipment_id=shipment_ref,
+        shipment_tracking=tracking_ref,
+        customer_id=cust_id,
+        customer_name=cust_name,
+        product_id=prod_id,
+        product_name=prod_name,
+        sku=sku,
+        type="Damaged Goods",
+        severity="Critical",
+        status="Detected",
+        expected_quantity=1,
+        observed_quantity=0,
+        detection_stage="Vendor Receiving",
+        detected_by="Sinu Gunshetty (Vendor)",
+        assigned_investigator="Vendor QA Desk (Sinu Gunshetty)",
+        preferred_resolution=claim_in.customer_choice,
+        resolution_notes=f"{claim_in.reason}: {notes_text}",
+        resolution_outcome="Pending",
+        detected_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    db.add(new_disc)
+
+    # 3. Discrepancy evidence
+    if claim_in.evidence_photos:
+        for photo_url in claim_in.evidence_photos:
+            ev = DiscrepancyEvidence(
+                id=f"evid-{uuid.uuid4().hex[:8]}",
+                discrepancy_id=disc_id,
+                type="Photo",
+                url=photo_url,
+                description=f"Initial evidence for claim {ret_number}",
+                timestamp=datetime.utcnow(),
+                uploaded_by=cust_name
+            )
+            db.add(ev)
+
+    # 4. Audit Log
+    audit = AuditEvent(
+        id=f"aud-{uuid.uuid4().hex[:8]}",
+        timestamp=datetime.utcnow(),
+        actor_name="Sinu Gunshetty",
+        actor_role="VENDOR",
+        action="CUSTOMER_DAMAGE_CLAIM_LOGGED",
+        entity_type="ReturnCase",
+        entity_id=ret_id,
+        details=(
+            f"Vendor registered incoming customer damage claim {ret_number} for {prod_name} ({sku}). "
+            f"Desired resolution: {claim_in.customer_choice}. Isolated in {quarantine_loc}."
+        )
+    )
+    db.add(audit)
+
+    db.commit()
+    db.refresh(new_return)
+    db.refresh(new_disc)
+
+    return CustomerDamagedClaimResponse(
+        success=True,
+        message=f"Customer damaged product claim {ret_number} logged and isolated in {quarantine_loc}.",
+        return_case=new_return,
+        discrepancy_case=new_disc
+    )
 
 
 @router.post("/claim", response_model=ReturnClaimResponse, status_code=status.HTTP_201_CREATED)

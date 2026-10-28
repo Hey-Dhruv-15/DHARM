@@ -369,6 +369,60 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
       .catch(err => console.debug('Notice fetching returns from API:', err));
 
+    // Sync live shipments from backend REST API (GET /api/shipments)
+    fetch('http://localhost:8000/api/shipments')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setShipments(prev => {
+            const trks = new Set(prev.map(s => s.trackingNumber));
+            const newItems: Shipment[] = data
+              .filter((d: any) => !trks.has(d.trackingNumber || d.tracking_number))
+              .map((d: any) => ({
+                id: d.id,
+                trackingNumber: d.trackingNumber || d.tracking_number,
+                ownerId: d.ownerId || d.owner_id || 'usr-owner-01',
+                ownerName: d.ownerName || d.owner_name || 'Dhruva (Owner)',
+                vendorId: d.vendorId || d.vendor_id || 'usr-vendor-02',
+                vendorName: d.vendorName || d.vendor_name || 'Trans-Express',
+                customerId: d.customerId || d.customer_id || 'usr-cust-03',
+                customerName: d.customerName || d.customer_name || 'Customer',
+                origin: d.origin || 'Central Logistics Hub',
+                destination: d.destination || 'Customer Facility',
+                status: d.status || 'In Transit',
+                items: (d.items || []).map((i: any) => ({
+                  productId: i.productId || i.product_id,
+                  productName: i.productName || i.product_name,
+                  sku: i.sku,
+                  barcode: i.barcode,
+                  containerId: i.containerId || i.container_id,
+                  containerNumber: i.containerNumber || i.container_number,
+                  expectedQuantity: i.expectedQuantity ?? i.expected_quantity ?? 1,
+                  verifiedQuantity: i.verifiedQuantity ?? i.verified_quantity ?? 0,
+                  scannedQuantity: i.scannedQuantity ?? i.scanned_quantity ?? 0,
+                  status: i.status || 'Pending'
+                })),
+                containerIds: d.containerIds || d.container_ids || [],
+                manifestHash: d.manifestHash || d.manifest_hash || '0x',
+                dispatchDate: d.dispatchDate || d.dispatch_date,
+                estimatedDelivery: d.estimatedDelivery || d.estimated_delivery,
+                actualDelivery: d.actualDelivery || d.actual_delivery,
+                notes: d.notes,
+                events: (d.events || []).map((e: any) => ({
+                  id: e.id,
+                  timestamp: e.timestamp,
+                  status: e.status,
+                  location: e.location,
+                  performedBy: e.performedBy || e.performed_by,
+                  notes: e.notes
+                }))
+              }));
+            return [...newItems, ...prev];
+          });
+        }
+      })
+      .catch(err => console.debug('Notice fetching shipments from API:', err));
+
     fetch('http://localhost:8000/api/discrepancies')
       .then(res => (res.ok ? res.json() : null))
       .then(data => {

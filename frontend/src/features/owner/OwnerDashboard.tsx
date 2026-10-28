@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
 import {
@@ -15,6 +15,20 @@ import { AlertCircle, AlertTriangle, ArrowRight, RotateCcw } from 'lucide-react'
 export const OwnerDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { products, shipments, discrepancies, returns } = useData();
+
+  // Real-time API KPI state directly synchronized with GET /api/dashboard/kpis
+  const [apiKpis, setApiKpis] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('http://localhost:8000/api/dashboard/kpis')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (data && data.status === 'success') {
+          setApiKpis(data);
+        }
+      })
+      .catch(err => console.debug('Notice fetching dashboard KPIs from API:', err));
+  }, []);
 
   // 1. Total SKUs / Total stock units
   const totalStockUnits = products.reduce((acc, p) => acc + p.stockQuantity, 0);
@@ -70,6 +84,21 @@ export const OwnerDashboard: React.FC = () => {
     r => r.status === 'Requested' || r.status === 'Received at Hub' || r.status === 'Quarantined'
   );
 
+  // Exact KPI values matching backend REST API / PostgreSQL master ledger
+  const displayTotalStock = apiKpis?.total_skus ?? totalStockUnits;
+  const displayProductLines = apiKpis?.registered_product_lines ?? products.length;
+  const displayActiveShipments = apiKpis?.active_shipments ?? activeShipments.length;
+  const displayOpenDiscrepancies = apiKpis?.open_discrepancies ?? openDiscrepancies.length;
+  const displayMatchRate = apiKpis?.manifest_match_rate ?? matchRate;
+
+  const displayMissingUnits = apiKpis?.priority_alerts?.missing_inventory_units ?? missingUnitsCount;
+  const displayLowStockSkus = apiKpis?.priority_alerts?.low_stock_skus ?? lowStockProducts.length;
+  const displayPendingReturns = apiKpis?.priority_alerts?.pending_returns ?? actionableReturns.length;
+
+  const displayChartData = (apiKpis?.shipment_reconciliation && apiKpis.shipment_reconciliation.length > 0)
+    ? apiKpis.shipment_reconciliation
+    : shipmentComparisonData;
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* 1. KPI Cards: Exactly 4 cards in one row */}
@@ -83,10 +112,10 @@ export const OwnerDashboard: React.FC = () => {
             Total SKUs
           </p>
           <p className="text-3xl font-extrabold text-slate-900 tracking-tight mt-2">
-            {totalStockUnits}
+            {displayTotalStock}
           </p>
           <p className="text-xs text-slate-400 mt-2 font-medium">
-            {products.length} registered product lines
+            {displayProductLines} registered product lines
           </p>
         </div>
 
@@ -99,7 +128,7 @@ export const OwnerDashboard: React.FC = () => {
             Active Shipments
           </p>
           <p className="text-3xl font-extrabold text-slate-900 tracking-tight mt-2">
-            {activeShipments.length}
+            {displayActiveShipments}
           </p>
           <p className="text-xs text-slate-400 mt-2 font-medium">
             In transit & verification
@@ -115,7 +144,7 @@ export const OwnerDashboard: React.FC = () => {
             Open Discrepancies
           </p>
           <p className="text-3xl font-extrabold text-slate-900 tracking-tight mt-2">
-            {openDiscrepancies.length}
+            {displayOpenDiscrepancies}
           </p>
           <p className="text-xs text-amber-600 mt-2 font-medium">
             Requires investigation
@@ -131,7 +160,7 @@ export const OwnerDashboard: React.FC = () => {
             Manifest Match Rate
           </p>
           <p className="text-3xl font-extrabold text-slate-900 tracking-tight mt-2">
-            {matchRate}%
+            {displayMatchRate}%
           </p>
           <p className="text-xs text-slate-400 mt-2 font-medium">
             Zero-mismatch verification
@@ -170,7 +199,7 @@ export const OwnerDashboard: React.FC = () => {
           <div className="h-72 w-full pt-3">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={shipmentComparisonData}
+                data={displayChartData}
                 margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
               >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -238,7 +267,7 @@ export const OwnerDashboard: React.FC = () => {
                     Missing inventory
                   </h3>
                   <p className="text-xs text-slate-600 mt-0.5">
-                    {missingUnitsCount} units · Requires investigation
+                    {displayMissingUnits} units · Requires investigation
                   </p>
                 </div>
               </div>
@@ -262,7 +291,7 @@ export const OwnerDashboard: React.FC = () => {
                     Low-stock items
                   </h3>
                   <p className="text-xs text-slate-600 mt-0.5">
-                    {lowStockProducts.length} SKUs · Below reorder threshold
+                    {displayLowStockSkus} SKUs · Below reorder threshold
                   </p>
                 </div>
               </div>
@@ -287,7 +316,7 @@ export const OwnerDashboard: React.FC = () => {
                       Pending returns
                     </h3>
                     <p className="text-xs text-slate-600 mt-0.5">
-                      {actionableReturns.length} return · Quarantine inspection required
+                      {displayPendingReturns} return · Quarantine inspection required
                     </p>
                   </div>
                 </div>

@@ -8,8 +8,19 @@ import type {
   AuditEvent,
   ScanRecord,
   DiscrepancyStatus,
-  UserRole
+  UserRole,
+  Order,
+  OrderStatus,
+  CustomerProfileData,
+  CustomerAddress,
+  BillingAddress,
+  CustomerNotification,
+  ProductVerificationResult
 } from '../types';
+import {
+  CustomerBackendService,
+  type DiscrepancySubmissionInput
+} from '../services/customerApi';
 import {
   INITIAL_PRODUCTS,
   INITIAL_CONTAINERS,
@@ -17,7 +28,10 @@ import {
   INITIAL_DISCREPANCIES,
   INITIAL_RETURNS,
   INITIAL_AUDIT_LOGS,
-  INITIAL_SCAN_RECORDS
+  INITIAL_SCAN_RECORDS,
+  INITIAL_ORDERS,
+  INITIAL_CUSTOMER_PROFILE,
+  INITIAL_NOTIFICATIONS
 } from '../data/mockData';
 
 interface ScanValidationResult {
@@ -38,6 +52,9 @@ interface DataContextType {
   returns: ReturnCase[];
   auditLogs: AuditEvent[];
   scanRecords: ScanRecord[];
+  orders: Order[];
+  customerProfile: CustomerProfileData;
+  notifications: CustomerNotification[];
   
   // Actions
   addProduct: (product: Omit<Product, 'id' | 'createdAt'>, actorName: string, role: UserRole) => Product;
@@ -60,6 +77,42 @@ interface DataContextType {
   createReturnRequest: (returnData: Omit<ReturnCase, 'id' | 'returnNumber' | 'status' | 'requestedAt' | 'updatedAt'>, actorName: string) => ReturnCase;
   updateReturnStatus: (id: string, status: ReturnCase['status'], inspectionNotes?: string, quarantineLoc?: string, actorName?: string) => void;
   resetDemoData: () => void;
+
+  // Customer Portal Actions
+  placeCustomerOrder: (
+    orderData: {
+      items: Array<{
+        productId: string;
+        productName: string;
+        sku: string;
+        image?: string;
+        quantity: number;
+        unitPrice: number;
+        gstRate: number;
+        totalPrice: number;
+      }>;
+      shippingAddress?: CustomerAddress;
+      billingAddress?: BillingAddress;
+      paymentMethod?: string;
+      notes?: string;
+      customerPoNumber?: string;
+      logisticsProvider?: string;
+      customerId?: string;
+      customerName?: string;
+    },
+    actorName?: string
+  ) => Order;
+  updateOrderStatus: (orderId: string, status: OrderStatus, actorName?: string) => void;
+  cancelCustomerOrder: (orderId: string, reason: string, actorName: string) => Order;
+  updateCustomerProfile: (updates: Partial<CustomerProfileData>, actorName: string) => CustomerProfileData;
+  addSavedAddress: (address: Omit<CustomerAddress, 'id'>, actorName: string) => CustomerAddress;
+  updateSavedAddress: (id: string, updates: Partial<CustomerAddress>, actorName: string) => void;
+  deleteSavedAddress: (id: string, actorName: string) => void;
+  setDefaultAddress: (id: string, actorName: string) => void;
+  verifyCustomerProduct: (code: string, customerId: string) => ProductVerificationResult;
+  submitCustomerDiscrepancy: (input: DiscrepancySubmissionInput, customerId: string, customerName: string) => DiscrepancyCase;
+  markNotificationAsRead: (notificationId: string) => void;
+  markAllNotificationsAsRead: (customerId: string) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -111,6 +164,47 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const s = localStorage.getItem('dharm_scans');
     return s ? JSON.parse(s) : INITIAL_SCAN_RECORDS;
   });
+
+  const [orders, setOrders] = useState<Order[]>(() => {
+    const s = localStorage.getItem('dharm_orders_v3');
+    if (s) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length >= 10) {
+          return parsed;
+        }
+      } catch (e) {
+        // fall through
+      }
+    }
+    localStorage.removeItem('dharm_orders_v2');
+    localStorage.removeItem('dharm_orders_v1');
+    return INITIAL_ORDERS;
+  });
+
+  const [customerProfile, setCustomerProfile] = useState<CustomerProfileData>(() => {
+    const s = localStorage.getItem('dharm_customer_profile_v1');
+    return s ? JSON.parse(s) : INITIAL_CUSTOMER_PROFILE;
+  });
+
+  const [notifications, setNotifications] = useState<CustomerNotification[]>(() => {
+    const s = localStorage.getItem('dharm_customer_notifs_v1');
+    return s ? JSON.parse(s) : INITIAL_NOTIFICATIONS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('dharm_orders_v3', JSON.stringify(orders));
+    localStorage.setItem('dharm_orders_v2', JSON.stringify(orders));
+    localStorage.setItem('dharm_orders_v1', JSON.stringify(orders));
+  }, [orders]);
+
+  useEffect(() => {
+    localStorage.setItem('dharm_customer_profile_v1', JSON.stringify(customerProfile));
+  }, [customerProfile]);
+
+  useEffect(() => {
+    localStorage.setItem('dharm_customer_notifs_v1', JSON.stringify(notifications));
+  }, [notifications]);
 
   // Sync to localStorage
   useEffect(() => {
@@ -656,6 +750,324 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logAudit(actorName, 'VENDOR', 'RETURN_STATUS_UPDATED', 'Return', id, `Return status changed to ${status}. Quarantine: ${quarantineLoc || 'N/A'}`);
   };
 
+  // Customer Portal Methods
+  const placeCustomerOrder = (
+    orderData: {
+      items: Array<{
+        productId: string;
+        productName: string;
+        sku: string;
+        image?: string;
+        quantity: number;
+        unitPrice: number;
+        gstRate: number;
+        totalPrice: number;
+      }>;
+      shippingAddress?: CustomerAddress;
+      billingAddress?: BillingAddress;
+      paymentMethod?: string;
+      notes?: string;
+      customerPoNumber?: string;
+      logisticsProvider?: string;
+      customerId?: string;
+      customerName?: string;
+    },
+    actorName?: string
+  ): Order => {
+    const subtotal = orderData.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    const taxTotal = orderData.items.reduce((sum, item) => sum + Math.round(item.totalPrice - (item.quantity * item.unitPrice)), 0);
+    const grandTotal = subtotal + taxTotal;
+
+    const newOrderNumber = `ORD-DHM-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newOrderId = `ord-${Date.now()}`;
+    const custId = orderData.customerId || 'usr-cust-03';
+    const custName = orderData.customerName || customerProfile.name || 'Anusha S (BioMed)';
+    const defaultShipAddr = customerProfile.savedAddresses?.find(a => a.isDefault) || customerProfile.savedAddresses?.[0] || INITIAL_CUSTOMER_PROFILE.savedAddresses[0];
+    const defaultBillAddr = customerProfile.billingAddress || INITIAL_CUSTOMER_PROFILE.billingAddress;
+
+    const newOrder: Order = {
+      id: newOrderId,
+      orderNumber: newOrderNumber,
+      customerId: custId,
+      customerName: custName,
+      customerPoNumber: orderData.customerPoNumber || 'Direct Commercial Order',
+      logisticsProvider: orderData.logisticsProvider || 'Bluedart Express',
+      trackingNumber: `TRK-DHM-${Math.floor(100000 + Math.random() * 900000)}`,
+      orderDate: new Date().toISOString(),
+      status: 'Processing',
+      expectedDeliveryDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
+      paymentStatus: 'Paid',
+      paymentMethod: orderData.paymentMethod || 'Corporate Net Banking',
+      items: orderData.items,
+      subtotal,
+      taxTotal,
+      grandTotal,
+      shippingAddress: orderData.shippingAddress || defaultShipAddr,
+      billingAddress: orderData.billingAddress || defaultBillAddr,
+      invoiceNumber: `INV-DHM-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      invoiceAvailable: true,
+      canCancel: true
+    };
+
+    setOrders(prev => [newOrder, ...prev]);
+
+    logAudit(
+      actorName || custName,
+      'CUSTOMER',
+      'ORDER_CREATED',
+      'Shipment',
+      newOrder.id,
+      `Customer placed new purchase order ${newOrder.orderNumber} for ${orderData.items.length} items (Total: ₹${grandTotal.toLocaleString('en-IN')})`
+    );
+
+    const newNotif: CustomerNotification = {
+      id: `notif-${Date.now()}`,
+      customerId: custId,
+      title: 'Order Placed Successfully',
+      message: `Your purchase order #${newOrder.orderNumber} has been received and is being processed.`,
+      category: 'ORDER',
+      timestamp: new Date().toISOString(),
+      read: false,
+      link: '/customer/orders',
+      severity: 'success'
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+
+    return newOrder;
+  };
+
+  const cancelCustomerOrder = (orderId: string, reason: string, actorName: string): Order => {
+    const { updatedOrders, cancelledOrder } = CustomerBackendService.cancelOrder(
+      'usr-cust-03',
+      orderId,
+      reason,
+      orders
+    );
+    setOrders(updatedOrders);
+    logAudit(
+      actorName,
+      'CUSTOMER',
+      'ORDER_CANCELLED',
+      'Shipment',
+      cancelledOrder.id,
+      `Customer cancelled order ${cancelledOrder.orderNumber}. Reason: ${reason || 'Prior to dispatch'}`
+    );
+
+    // Also add notification
+    const newNotif: CustomerNotification = {
+      id: `notif-${Date.now()}`,
+      customerId: 'usr-cust-03',
+      title: 'Order Cancelled',
+      message: `Order #${cancelledOrder.orderNumber} was successfully cancelled as requested.`,
+      category: 'ORDER',
+      timestamp: new Date().toISOString(),
+      read: false,
+      link: '/customer/orders',
+      severity: 'info'
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+
+    return cancelledOrder;
+  };
+
+  const updateOrderStatus = (orderId: string, status: OrderStatus, actorName?: string) => {
+    setOrders(prev =>
+      prev.map(o => {
+        if (o.id === orderId) {
+          const isDelivered = status === 'Delivered';
+          return {
+            ...o,
+            status,
+            deliveredAt: isDelivered ? new Date().toISOString() : (o as any).deliveredAt,
+            canCancel: status === 'Placed' || status === 'Processing'
+          };
+        }
+        return o;
+      })
+    );
+
+    const targetOrder = orders.find(o => o.id === orderId);
+    if (targetOrder) {
+      logAudit(
+        actorName || customerProfile.name || 'Customer Consignee',
+        'CUSTOMER',
+        'ORDER_STATUS_UPDATED',
+        'Shipment',
+        orderId,
+        `Order ${targetOrder.orderNumber} fulfillment status changed to ${status}.`
+      );
+
+      if (status === 'Delivered') {
+        const newNotif: CustomerNotification = {
+          id: `notif-${Date.now()}`,
+          customerId: targetOrder.customerId,
+          title: 'Order Delivered Successfully',
+          message: `Order #${targetOrder.orderNumber} has been delivered and moved to your Order History.`,
+          category: 'ORDER',
+          timestamp: new Date().toISOString(),
+          read: false,
+          link: '/customer/orders',
+          severity: 'success'
+        };
+        setNotifications(prev => [newNotif, ...prev]);
+      }
+    }
+  };
+
+  const updateCustomerProfile = (
+    updates: Partial<CustomerProfileData>,
+    actorName: string
+  ): CustomerProfileData => {
+    const updated = CustomerBackendService.updateProfile('usr-cust-03', customerProfile, updates);
+    setCustomerProfile(updated);
+    logAudit(actorName, 'CUSTOMER', 'PROFILE_UPDATED', 'Shipment', updated.customerId, 'Updated customer account details and business GSTIN.');
+    return updated;
+  };
+
+  const addSavedAddress = (
+    address: Omit<CustomerAddress, 'id'>,
+    actorName: string
+  ): CustomerAddress => {
+    const updatedProfile = CustomerBackendService.addSavedAddress('usr-cust-03', customerProfile, address);
+    setCustomerProfile(updatedProfile);
+    const added = updatedProfile.savedAddresses[updatedProfile.savedAddresses.length - 1];
+    logAudit(actorName, 'CUSTOMER', 'ADDRESS_ADDED', 'Shipment', added.id, `Saved new delivery address: ${added.label}`);
+    return added;
+  };
+
+  const updateSavedAddress = (
+    id: string,
+    updates: Partial<CustomerAddress>,
+    actorName: string
+  ) => {
+    const updatedProfile = CustomerBackendService.updateSavedAddress('usr-cust-03', customerProfile, id, updates);
+    setCustomerProfile(updatedProfile);
+    logAudit(actorName, 'CUSTOMER', 'ADDRESS_UPDATED', 'Shipment', id, 'Updated saved delivery address details.');
+  };
+
+  const deleteSavedAddress = (id: string, actorName: string) => {
+    const updatedProfile = CustomerBackendService.deleteSavedAddress('usr-cust-03', customerProfile, id);
+    setCustomerProfile(updatedProfile);
+    logAudit(actorName, 'CUSTOMER', 'ADDRESS_DELETED', 'Shipment', id, 'Removed saved delivery address.');
+  };
+
+  const setDefaultAddress = (id: string, actorName: string) => {
+    const updatedProfile = CustomerBackendService.setDefaultAddress('usr-cust-03', customerProfile, id);
+    setCustomerProfile(updatedProfile);
+    logAudit(actorName, 'CUSTOMER', 'ADDRESS_SET_DEFAULT', 'Shipment', id, 'Set default receiving delivery address.');
+  };
+
+  const verifyCustomerProduct = (code: string, customerId: string): ProductVerificationResult => {
+    const result = CustomerBackendService.verifyProduct(
+      customerId,
+      code,
+      shipments,
+      products,
+      scanRecords
+    );
+
+    // Save scan record
+    const newScan: ScanRecord = {
+      id: `scn-${Date.now()}`,
+      scannedCode: code.trim(),
+      scannedAt: new Date().toISOString(),
+      scannedBy: customerProfile.name,
+      role: 'CUSTOMER',
+      shipmentId: result.shipment?.id,
+      type: 'Product',
+      result: result.status === 'VERIFIED'
+        ? 'Expected Match'
+        : result.status === 'DUPLICATE_SCAN'
+        ? 'Duplicate Attempt'
+        : result.status === 'MISMATCH_DETECTED'
+        ? 'Unexpected Product'
+        : 'Damaged Reported',
+      notes: result.message
+    };
+    setScanRecords(prev => [newScan, ...prev]);
+
+    return result;
+  };
+
+  const submitCustomerDiscrepancy = (
+    input: DiscrepancySubmissionInput,
+    customerId: string,
+    customerName: string
+  ): DiscrepancyCase => {
+    const newCase = CustomerBackendService.reportDiscrepancy(
+      customerId,
+      customerName,
+      input,
+      orders,
+      shipments
+    );
+
+    setDiscrepancies(prev => [newCase, ...prev]);
+
+    // Update shipment status if applicable
+    if (newCase.shipmentId) {
+      setShipments(prev =>
+        prev.map(s => {
+          if (s.id === newCase.shipmentId) {
+            return {
+              ...s,
+              status: 'Discrepancy Detected',
+              events: [
+                ...s.events,
+                {
+                  id: `ev-${Date.now()}`,
+                  timestamp: new Date().toISOString(),
+                  status: 'Discrepancy Detected',
+                  location: 'Customer Receiving Bay',
+                  performedBy: customerName,
+                  notes: `Customer filed discrepancy ${newCase.discrepancyNumber}: ${newCase.type} (${newCase.observedQuantity}/${newCase.expectedQuantity}).`
+                }
+              ]
+            };
+          }
+          return s;
+        })
+      );
+    }
+
+    logAudit(
+      customerName,
+      'CUSTOMER',
+      'DISCREPANCY_LOGGED',
+      'Discrepancy',
+      newCase.id,
+      `Customer filed discrepancy report ${newCase.discrepancyNumber} for ${newCase.type}`
+    );
+
+    // Add notification
+    const newNotif: CustomerNotification = {
+      id: `notif-${Date.now()}`,
+      customerId,
+      title: 'Discrepancy Report Registered',
+      message: `Complaint #${newCase.discrepancyNumber} logged under review by quality auditor.`,
+      category: 'DISCREPANCY',
+      timestamp: new Date().toISOString(),
+      read: false,
+      link: '/customer/issues',
+      severity: 'warning'
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+
+    return newCase;
+  };
+
+  const markNotificationAsRead = (notificationId: string) => {
+    setNotifications(prev =>
+      prev.map(n => (n.id === notificationId ? { ...n, read: true } : n))
+    );
+  };
+
+  const markAllNotificationsAsRead = (customerId: string) => {
+    setNotifications(prev =>
+      prev.map(n => (n.customerId === customerId ? { ...n, read: true } : n))
+    );
+  };
+
   const resetDemoData = () => {
     setProducts(INITIAL_PRODUCTS);
     setContainers(INITIAL_CONTAINERS);
@@ -690,7 +1102,22 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         confirmCustomerDelivery,
         createReturnRequest,
         updateReturnStatus,
-        resetDemoData
+        resetDemoData,
+        orders,
+        customerProfile,
+        notifications,
+        placeCustomerOrder,
+        updateOrderStatus,
+        cancelCustomerOrder,
+        updateCustomerProfile,
+        addSavedAddress,
+        updateSavedAddress,
+        deleteSavedAddress,
+        setDefaultAddress,
+        verifyCustomerProduct,
+        submitCustomerDiscrepancy,
+        markNotificationAsRead,
+        markAllNotificationsAsRead
       }}
     >
       {children}

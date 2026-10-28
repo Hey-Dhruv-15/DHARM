@@ -29,6 +29,8 @@ import { VendorSettings } from '../features/vendor/VendorSettings';
 
 // Customer Pages
 import { CustomerDashboard } from '../features/customer/CustomerDashboard';
+import { CustomerOrder } from '../features/customer/CustomerOrder';
+import { CustomerOrders } from '../features/customer/CustomerOrders';
 import { CustomerShipments } from '../features/customer/CustomerShipments';
 import { CustomerIssues } from '../features/customer/CustomerIssues';
 import { CustomerReturns } from '../features/customer/CustomerReturns';
@@ -105,6 +107,8 @@ export const AppRoutes: React.FC = () => {
       {/* Customer Protected Routes */}
       <Route element={<AppLayout allowedRoles={['CUSTOMER']} />}>
         <Route path="/customer/dashboard" element={<CustomerDashboard />} />
+        <Route path="/customer/order" element={<CustomerOrder />} />
+        <Route path="/customer/orders" element={<CustomerOrders />} />
         <Route path="/customer/shipments" element={<CustomerShipments />} />
         <Route path="/customer/shipments/:id" element={<CustomerShipments />} />
         <Route path="/customer/issues" element={<CustomerIssues />} />

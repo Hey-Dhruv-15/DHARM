@@ -5,7 +5,10 @@ import type {
   DiscrepancyCase,
   ReturnCase,
   AuditEvent,
-  ScanRecord
+  ScanRecord,
+  Order,
+  CustomerProfileData,
+  CustomerNotification
 } from '../types';
 
 export const DEMO_CREDENTIALS = {
@@ -457,7 +460,7 @@ export const INITIAL_SHIPMENTS: Shipment[] = [
     ownerName: 'Dhruva (Owner)',
     vendorId: 'user-vendor',
     vendorName: 'Sinu Gunshetty (Trans-Express)',
-    customerId: 'user-cust',
+    customerId: 'usr-cust-03',
     customerName: 'Anusha S (BioMed)',
     origin: 'Apex Central Depot (Hub Alpha)',
     destination: 'BioMed Research Campus Bay 2',
@@ -547,7 +550,7 @@ export const INITIAL_SHIPMENTS: Shipment[] = [
     ownerName: 'Dhruva (Owner)',
     vendorId: 'user-vendor',
     vendorName: 'Sinu Gunshetty (Trans-Express)',
-    customerId: 'user-cust',
+    customerId: 'usr-cust-03',
     customerName: 'Anusha S (BioMed)',
     origin: 'Apex Central Depot (Hub Alpha)',
     destination: 'BioMed Facility Annex B',
@@ -589,7 +592,7 @@ export const INITIAL_SHIPMENTS: Shipment[] = [
     ownerName: 'Dhruva (Owner)',
     vendorId: 'user-vendor',
     vendorName: 'Sinu Gunshetty (Trans-Express)',
-    customerId: 'user-cust',
+    customerId: 'usr-cust-03',
     customerName: 'Anusha S (BioMed)',
     origin: 'Apex Central Depot',
     destination: 'BioMed Research Campus Bay 2',
@@ -754,7 +757,7 @@ export const INITIAL_RETURNS: ReturnCase[] = [
     returnNumber: 'RET-2026-044',
     originalShipmentId: 'shp-2026-003',
     trackingNumber: 'TRK-DHM-773410',
-    customerId: 'user-cust',
+    customerId: 'usr-cust-03',
     customerName: 'Anusha S (BioMed)',
     productId: 'prod-003',
     productName: 'BioReagent Lyophilized Stabilizer',
@@ -849,5 +852,607 @@ export const INITIAL_SCAN_RECORDS: ScanRecord[] = [
     type: 'Product',
     result: 'Expected Match',
     notes: 'Item verified and added to receipt count.'
+  }
+];
+
+
+export const INITIAL_CUSTOMER_PROFILE: CustomerProfileData = {
+  customerId: 'CUST-BIZ-8821',
+  userId: 'usr-cust-03',
+  customerType: 'business',
+  name: 'Anusha S',
+  companyName: 'BioMed Advanced Research Diagnostics Pvt Ltd',
+  email: 'anusha.s2028@gmail.com',
+  mobile: '+91 98451 22890',
+  gstin: '29AABCB1234F1Z9',
+  accountStatus: 'Active',
+  createdAt: '2026-01-15T09:30:00Z',
+  billingAddress: {
+    street: '4th Floor, Tech Innovation Center, Tower B, Electronic City Phase 1',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    pinCode: '560100',
+    country: 'India'
+  },
+  savedAddresses: [
+    {
+      id: 'addr-01',
+      label: 'Primary Receiving Dock',
+      contactName: 'Anusha S',
+      phone: '+91 98451 22890',
+      street: 'BioMed Campus Bay 2, Tech Park, Hosur Road',
+      city: 'Bengaluru',
+      state: 'Karnataka',
+      pinCode: '560100',
+      isDefault: true,
+      deliveryInstructions: 'Deliver cold-chain bins directly to Clinical Storage Bay 2. Check temperature seals upon handover.'
+    },
+    {
+      id: 'addr-02',
+      label: 'HQ Analytical Lab',
+      contactName: 'Dr. Ramesh Rao',
+      phone: '+91 98451 88310',
+      street: 'Suite 301, Diagnostics Wing, BioMed Tower, Whitefield',
+      city: 'Bengaluru',
+      state: 'Karnataka',
+      pinCode: '560066',
+      isDefault: false,
+      deliveryInstructions: 'Deliver during 09:00 - 17:00 IST. Gate security pass required.'
+    },
+    {
+      id: 'addr-03',
+      label: 'Clinical Trial Depot Annex',
+      contactName: 'Pooja K',
+      phone: '+91 98451 66421',
+      street: 'Plot 12-C, Industrial Bio Park, Bommasandra',
+      city: 'Bengaluru',
+      state: 'Karnataka',
+      pinCode: '560099',
+      isDefault: false,
+      deliveryInstructions: 'Heavy cargo ramp available at Gate 4.'
+    }
+  ]
+};
+
+export const INITIAL_ORDERS: Order[] = [
+  {
+    id: 'ord-2026-101',
+    orderNumber: 'ORD-DHM-2026-9041',
+    customerId: 'usr-cust-03',
+    customerName: 'Anusha S (BioMed)',
+    customerPoNumber: 'PO-BIO-2026-0812',
+    logisticsProvider: 'DTDC Express',
+    orderDate: '2026-10-25T10:15:00Z',
+    status: 'Processing',
+    expectedDeliveryDate: '2026-10-29T16:00:00Z',
+    paymentStatus: 'Paid',
+    paymentMethod: 'Corporate Net Banking',
+    items: [
+      {
+        productId: 'prod-001',
+        productName: 'Cryo-Shield Specimen Transporter',
+        sku: 'MED-CRYO-901',
+        image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=120&auto=format&fit=crop&q=80',
+        quantity: 12,
+        unitPrice: 102500,
+        gstRate: 18,
+        totalPrice: 1451400
+      },
+      {
+        productId: 'prod-002',
+        productName: 'OptiTrace Diagnostic Sensor Array',
+        sku: 'BIO-DIAG-440',
+        image: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?w=120&auto=format&fit=crop&q=80',
+        quantity: 8,
+        unitPrice: 72980,
+        gstRate: 18,
+        totalPrice: 688931
+      },
+      {
+        productId: 'prod-003',
+        productName: 'BioReagent Lyophilized Stabilizer',
+        sku: 'PHRM-COLD-102',
+        image: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=120&auto=format&fit=crop&q=80',
+        quantity: 20,
+        unitPrice: 27880,
+        gstRate: 12,
+        totalPrice: 624512
+      }
+    ],
+    subtotal: 2369640,
+    taxTotal: 395203,
+    grandTotal: 2764843,
+    shippingAddress: INITIAL_CUSTOMER_PROFILE.savedAddresses[0],
+    billingAddress: INITIAL_CUSTOMER_PROFILE.billingAddress,
+    shipmentId: 'shp-2026-001',
+    trackingNumber: 'TRK-DHM-884920',
+    invoiceNumber: 'INV-DHM-2026-0881',
+    invoiceAvailable: true,
+    canCancel: false
+  },
+  {
+    id: 'ord-2026-102',
+    orderNumber: 'ORD-DHM-2026-9088',
+    customerId: 'usr-cust-03',
+    customerName: 'Anusha S (BioMed)',
+    customerPoNumber: 'PO-BIO-2026-0904',
+    logisticsProvider: 'Bluedart Express',
+    orderDate: '2026-10-27T14:20:00Z',
+    status: 'Processing',
+    expectedDeliveryDate: '2026-10-31T12:00:00Z',
+    paymentStatus: 'Paid',
+    paymentMethod: 'NEFT / RTGS Transfer',
+    items: [
+      {
+        productId: 'prod-005',
+        productName: 'IoT Telemetry Gateway Hub v3',
+        sku: 'ELEC-TELE-808',
+        image: 'https://images.unsplash.com/photo-1558346490-a72e53ae2d4f?w=120&auto=format&fit=crop&q=80',
+        quantity: 15,
+        unitPrice: 55760,
+        gstRate: 18,
+        totalPrice: 986952
+      }
+    ],
+    subtotal: 836400,
+    taxTotal: 150552,
+    grandTotal: 986952,
+    shippingAddress: INITIAL_CUSTOMER_PROFILE.savedAddresses[1],
+    billingAddress: INITIAL_CUSTOMER_PROFILE.billingAddress,
+    shipmentId: 'shp-2026-002',
+    trackingNumber: 'TRK-DHM-991204',
+    invoiceNumber: 'INV-DHM-2026-0914',
+    invoiceAvailable: true,
+    canCancel: true
+  },
+  {
+    id: 'ord-2026-103',
+    orderNumber: 'ORD-DHM-2026-8812',
+    customerId: 'usr-cust-03',
+    customerName: 'Anusha S (BioMed)',
+    customerPoNumber: 'Direct Commercial Order',
+    logisticsProvider: 'Trans-Express Cold-Chain',
+    orderDate: '2026-10-20T09:00:00Z',
+    status: 'Delivered',
+    expectedDeliveryDate: '2026-10-23T15:00:00Z',
+    paymentStatus: 'Paid',
+    paymentMethod: 'Corporate Net Banking',
+    items: [
+      {
+        productId: 'prod-003',
+        productName: 'BioReagent Lyophilized Stabilizer',
+        sku: 'PHRM-COLD-102',
+        image: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=120&auto=format&fit=crop&q=80',
+        quantity: 40,
+        unitPrice: 27880,
+        gstRate: 12,
+        totalPrice: 1249024
+      }
+    ],
+    subtotal: 1115200,
+    taxTotal: 133824,
+    grandTotal: 1249024,
+    shippingAddress: INITIAL_CUSTOMER_PROFILE.savedAddresses[0],
+    billingAddress: INITIAL_CUSTOMER_PROFILE.billingAddress,
+    shipmentId: 'shp-2026-003',
+    trackingNumber: 'TRK-DHM-773410',
+    invoiceNumber: 'INV-DHM-2026-0740',
+    invoiceAvailable: true,
+    canCancel: false
+  },
+  {
+    id: 'ord-2026-104',
+    orderNumber: 'ORD-DHM-2026-9150',
+    customerId: 'usr-cust-03',
+    customerName: 'Anusha S (BioMed)',
+    customerPoNumber: 'PO-BIO-2026-0771',
+    logisticsProvider: 'Bluedart Express',
+    orderDate: '2026-10-28T09:45:00Z',
+    status: 'Confirmed',
+    expectedDeliveryDate: '2026-11-01T14:00:00Z',
+    paymentStatus: 'Paid',
+    paymentMethod: 'Corporate Purchase Order / Net-30',
+    items: [
+      {
+        productId: 'prod-004',
+        productName: 'NanoPore Sterile Filtration Cartridge',
+        sku: 'MED-STER-551',
+        image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=120&auto=format&fit=crop&q=80',
+        quantity: 5,
+        unitPrice: 34440,
+        gstRate: 18,
+        totalPrice: 203196
+      }
+    ],
+    subtotal: 172200,
+    taxTotal: 30996,
+    grandTotal: 203196,
+    shippingAddress: INITIAL_CUSTOMER_PROFILE.savedAddresses[0],
+    billingAddress: INITIAL_CUSTOMER_PROFILE.billingAddress,
+    trackingNumber: 'TRK-DHM-662910',
+    invoiceNumber: 'INV-DHM-2026-0925',
+    invoiceAvailable: true,
+    canCancel: true
+  },
+  {
+    id: 'ord-2026-105',
+    orderNumber: 'ORD-DHM-2026-9210',
+    customerId: 'usr-cust-03',
+    customerName: 'Anusha S (BioMed)',
+    customerPoNumber: 'PO-CLIN-2026-0419',
+    logisticsProvider: 'FedEx Healthcare',
+    orderDate: '2026-10-26T11:30:00Z',
+    status: 'Processing',
+    expectedDeliveryDate: '2026-10-30T17:00:00Z',
+    paymentStatus: 'Paid',
+    paymentMethod: 'Corporate Net Banking',
+    items: [
+      {
+        productId: 'prod-002',
+        productName: 'OptiTrace Diagnostic Sensor Array',
+        sku: 'BIO-DIAG-440',
+        quantity: 6,
+        unitPrice: 72980,
+        gstRate: 18,
+        totalPrice: 516698
+      },
+      {
+        productId: 'prod-003',
+        productName: 'BioReagent Lyophilized Stabilizer',
+        sku: 'PHRM-COLD-102',
+        quantity: 10,
+        unitPrice: 27880,
+        gstRate: 12,
+        totalPrice: 312256
+      }
+    ],
+    subtotal: 716680,
+    taxTotal: 112274,
+    grandTotal: 828954,
+    shippingAddress: INITIAL_CUSTOMER_PROFILE.savedAddresses[1],
+    billingAddress: INITIAL_CUSTOMER_PROFILE.billingAddress,
+    trackingNumber: 'TRK-DHM-551820',
+    invoiceNumber: 'INV-DHM-2026-0931',
+    invoiceAvailable: true,
+    canCancel: true
+  },
+  {
+    id: 'ord-2026-106',
+    orderNumber: 'ORD-DHM-2026-9233',
+    customerId: 'usr-cust-03',
+    customerName: 'Anusha S (BioMed)',
+    customerPoNumber: 'PO-BIO-2026-0655',
+    logisticsProvider: 'DTDC Express',
+    orderDate: '2026-10-24T08:15:00Z',
+    status: 'Processing',
+    expectedDeliveryDate: '2026-10-28T18:00:00Z',
+    paymentStatus: 'Paid',
+    paymentMethod: 'NEFT / RTGS Transfer',
+    items: [
+      {
+        productId: 'prod-001',
+        productName: 'Cryo-Shield Specimen Transporter',
+        sku: 'MED-CRYO-901',
+        quantity: 4,
+        unitPrice: 102500,
+        gstRate: 18,
+        totalPrice: 483800
+      }
+    ],
+    subtotal: 410000,
+    taxTotal: 73800,
+    grandTotal: 483800,
+    shippingAddress: INITIAL_CUSTOMER_PROFILE.savedAddresses[0],
+    billingAddress: INITIAL_CUSTOMER_PROFILE.billingAddress,
+    shipmentId: 'shp-2026-001',
+    trackingNumber: 'TRK-DHM-440931',
+    invoiceNumber: 'INV-DHM-2026-0940',
+    invoiceAvailable: true,
+    canCancel: false
+  },
+  {
+    id: 'ord-2026-107',
+    orderNumber: 'ORD-DHM-2026-8790',
+    customerId: 'usr-cust-03',
+    customerName: 'Anusha S (BioMed)',
+    customerPoNumber: 'PO-BIO-2026-0330',
+    logisticsProvider: 'Bluedart Express',
+    orderDate: '2026-10-18T13:40:00Z',
+    status: 'Delivered',
+    expectedDeliveryDate: '2026-10-21T11:00:00Z',
+    paymentStatus: 'Paid',
+    paymentMethod: 'Corporate Net Banking',
+    items: [
+      {
+        productId: 'prod-005',
+        productName: 'IoT Telemetry Gateway Hub v3',
+        sku: 'ELEC-TELE-808',
+        quantity: 8,
+        unitPrice: 55760,
+        gstRate: 18,
+        totalPrice: 526374
+      }
+    ],
+    subtotal: 446080,
+    taxTotal: 80294,
+    grandTotal: 526374,
+    shippingAddress: INITIAL_CUSTOMER_PROFILE.savedAddresses[0],
+    billingAddress: INITIAL_CUSTOMER_PROFILE.billingAddress,
+    trackingNumber: 'TRK-DHM-331822',
+    invoiceNumber: 'INV-DHM-2026-0715',
+    invoiceAvailable: true,
+    canCancel: false
+  },
+  {
+    id: 'ord-2026-108',
+    orderNumber: 'ORD-DHM-2026-8650',
+    customerId: 'usr-cust-03',
+    customerName: 'Anusha S (BioMed)',
+    customerPoNumber: 'Direct Commercial Order',
+    logisticsProvider: 'Trans-Express Cold-Chain',
+    orderDate: '2026-10-15T10:00:00Z',
+    status: 'Cancelled',
+    expectedDeliveryDate: '2026-10-19T16:00:00Z',
+    paymentStatus: 'Pending',
+    paymentMethod: 'Corporate Purchase Order / Net-30',
+    items: [
+      {
+        productId: 'prod-004',
+        productName: 'NanoPore Sterile Filtration Cartridge',
+        sku: 'MED-STER-551',
+        quantity: 10,
+        unitPrice: 34440,
+        gstRate: 18,
+        totalPrice: 406392
+      }
+    ],
+    subtotal: 344400,
+    taxTotal: 61992,
+    grandTotal: 406392,
+    shippingAddress: INITIAL_CUSTOMER_PROFILE.savedAddresses[1],
+    billingAddress: INITIAL_CUSTOMER_PROFILE.billingAddress,
+    invoiceAvailable: false,
+    canCancel: false,
+    cancellationReason: 'Protocol modification at Clinical Trial Dept.'
+  },
+  {
+    id: 'ord-2026-109',
+    orderNumber: 'ORD-DHM-2026-9288',
+    customerId: 'usr-cust-03',
+    customerName: 'Anusha S (BioMed)',
+    customerPoNumber: 'PO-BIO-2026-0218',
+    logisticsProvider: 'Bluedart Express',
+    orderDate: '2026-10-27T16:10:00Z',
+    status: 'Processing',
+    expectedDeliveryDate: '2026-10-31T15:30:00Z',
+    paymentStatus: 'Paid',
+    paymentMethod: 'Corporate Net Banking',
+    items: [
+      {
+        productId: 'prod-001',
+        productName: 'Cryo-Shield Specimen Transporter',
+        sku: 'MED-CRYO-901',
+        quantity: 10,
+        unitPrice: 102500,
+        gstRate: 18,
+        totalPrice: 1209500
+      },
+      {
+        productId: 'prod-004',
+        productName: 'NanoPore Sterile Filtration Cartridge',
+        sku: 'MED-STER-551',
+        quantity: 12,
+        unitPrice: 34440,
+        gstRate: 18,
+        totalPrice: 487670
+      }
+    ],
+    subtotal: 1438280,
+    taxTotal: 258890,
+    grandTotal: 1697170,
+    shippingAddress: INITIAL_CUSTOMER_PROFILE.savedAddresses[0],
+    billingAddress: INITIAL_CUSTOMER_PROFILE.billingAddress,
+    trackingNumber: 'TRK-DHM-229105',
+    invoiceNumber: 'INV-DHM-2026-0955',
+    invoiceAvailable: true,
+    canCancel: true
+  },
+  {
+    id: 'ord-2026-110',
+    orderNumber: 'ORD-DHM-2026-8512',
+    customerId: 'usr-cust-03',
+    customerName: 'Anusha S (BioMed)',
+    customerPoNumber: 'PO-LAB-2026-0114',
+    logisticsProvider: 'DTDC Express',
+    orderDate: '2026-10-12T09:20:00Z',
+    status: 'Delivered',
+    expectedDeliveryDate: '2026-10-15T14:00:00Z',
+    paymentStatus: 'Paid',
+    paymentMethod: 'NEFT / RTGS Transfer',
+    items: [
+      {
+        productId: 'prod-003',
+        productName: 'BioReagent Lyophilized Stabilizer',
+        sku: 'PHRM-COLD-102',
+        quantity: 50,
+        unitPrice: 27880,
+        gstRate: 12,
+        totalPrice: 1561280
+      }
+    ],
+    subtotal: 1394000,
+    taxTotal: 167280,
+    grandTotal: 1561280,
+    shippingAddress: INITIAL_CUSTOMER_PROFILE.savedAddresses[0],
+    billingAddress: INITIAL_CUSTOMER_PROFILE.billingAddress,
+    trackingNumber: 'TRK-DHM-118274',
+    invoiceNumber: 'INV-DHM-2026-0688',
+    invoiceAvailable: true,
+    canCancel: false
+  },
+  {
+    id: 'ord-2026-111',
+    orderNumber: 'ORD-DHM-2026-9304',
+    customerId: 'usr-cust-03',
+    customerName: 'Anusha S (BioMed)',
+    customerPoNumber: 'PO-BIO-2026-0102',
+    logisticsProvider: 'FedEx Healthcare',
+    orderDate: '2026-10-28T14:00:00Z',
+    status: 'Placed',
+    expectedDeliveryDate: '2026-11-01T12:00:00Z',
+    paymentStatus: 'Paid',
+    paymentMethod: 'Corporate Net Banking',
+    items: [
+      {
+        productId: 'prod-002',
+        productName: 'OptiTrace Diagnostic Sensor Array',
+        sku: 'BIO-DIAG-440',
+        quantity: 15,
+        unitPrice: 72980,
+        gstRate: 18,
+        totalPrice: 1291746
+      }
+    ],
+    subtotal: 1094700,
+    taxTotal: 197046,
+    grandTotal: 1291746,
+    shippingAddress: INITIAL_CUSTOMER_PROFILE.savedAddresses[1],
+    billingAddress: INITIAL_CUSTOMER_PROFILE.billingAddress,
+    invoiceNumber: 'INV-DHM-2026-0962',
+    invoiceAvailable: true,
+    canCancel: true
+  },
+  {
+    id: 'ord-2026-112',
+    orderNumber: 'ORD-DHM-2026-8420',
+    customerId: 'usr-cust-03',
+    customerName: 'Anusha S (BioMed)',
+    customerPoNumber: 'PO-BIO-2026-0095',
+    logisticsProvider: 'Bluedart Express',
+    orderDate: '2026-10-08T11:00:00Z',
+    status: 'Delivered',
+    expectedDeliveryDate: '2026-10-11T16:30:00Z',
+    paymentStatus: 'Paid',
+    paymentMethod: 'Corporate Net Banking',
+    items: [
+      {
+        productId: 'prod-001',
+        productName: 'Cryo-Shield Specimen Transporter',
+        sku: 'MED-CRYO-901',
+        quantity: 6,
+        unitPrice: 102500,
+        gstRate: 18,
+        totalPrice: 725700
+      },
+      {
+        productId: 'prod-005',
+        productName: 'IoT Telemetry Gateway Hub v3',
+        sku: 'ELEC-TELE-808',
+        quantity: 4,
+        unitPrice: 55760,
+        gstRate: 18,
+        totalPrice: 263187
+      }
+    ],
+    subtotal: 838040,
+    taxTotal: 150847,
+    grandTotal: 988887,
+    shippingAddress: INITIAL_CUSTOMER_PROFILE.savedAddresses[0],
+    billingAddress: INITIAL_CUSTOMER_PROFILE.billingAddress,
+    trackingNumber: 'TRK-DHM-990412',
+    invoiceNumber: 'INV-DHM-2026-0610',
+    invoiceAvailable: true,
+    canCancel: false
+  }
+];
+
+export const INITIAL_NOTIFICATIONS: CustomerNotification[] = [
+  {
+    id: 'notif-001',
+    customerId: 'usr-cust-03',
+    title: 'Order Confirmed',
+    message: 'Purchase order #ORD-DHM-2026-9150 has been received and scheduled for warehouse allocation.',
+    category: 'ORDER',
+    timestamp: '2026-10-28T16:46:00Z',
+    read: false,
+    link: '/customer/orders',
+    severity: 'success'
+  },
+  {
+    id: 'notif-002',
+    customerId: 'usr-cust-03',
+    title: 'Shipment Dispatched',
+    message: 'Consignment TRK-DHM-884920 departed Apex Central Depot with locked SHA-256 manifest.',
+    category: 'SHIPMENT',
+    timestamp: '2026-10-26T14:35:00Z',
+    read: false,
+    link: '/customer/shipments',
+    severity: 'info'
+  },
+  {
+    id: 'notif-003',
+    customerId: 'usr-cust-03',
+    title: 'Transit Verification Delay',
+    message: 'Shipment TRK-DHM-884920 flagged for secondary count reconciliation at Midwest Hub 4.',
+    category: 'SHIPMENT',
+    timestamp: '2026-10-27T09:42:00Z',
+    read: false,
+    link: '/customer/shipments',
+    severity: 'warning'
+  },
+  {
+    id: 'notif-004',
+    customerId: 'usr-cust-03',
+    title: 'Out for Delivery',
+    message: 'Consignment TRK-DHM-884920 is en route to BioMed Campus Bay 2 with Trans-Express courier.',
+    category: 'SHIPMENT',
+    timestamp: '2026-10-28T08:30:00Z',
+    read: true,
+    link: '/customer/shipments',
+    severity: 'info'
+  },
+  {
+    id: 'notif-005',
+    customerId: 'usr-cust-03',
+    title: 'Delivery Confirmed',
+    message: 'Shipment TRK-DHM-773410 signed off by Anusha S at Clinical Receiving Bay.',
+    category: 'SHIPMENT',
+    timestamp: '2026-10-23T14:48:00Z',
+    read: true,
+    link: '/customer/shipments',
+    severity: 'success'
+  },
+  {
+    id: 'notif-006',
+    customerId: 'usr-cust-03',
+    title: 'Product Verification Alert',
+    message: 'QR code verification scan logged for Cryo-Shield Specimen Transporter (BC-901-CRYO-8821).',
+    category: 'VERIFICATION',
+    timestamp: '2026-10-27T09:33:00Z',
+    read: true,
+    link: '/customer/verify',
+    severity: 'info'
+  },
+  {
+    id: 'notif-007',
+    customerId: 'usr-cust-03',
+    title: 'Discrepancy Claim Approved',
+    message: 'Exception DIS-2026-072 reviewed by Product Owner. Full replacement unit approved.',
+    category: 'DISCREPANCY',
+    timestamp: '2026-10-24T11:05:00Z',
+    read: true,
+    link: '/customer/issues',
+    severity: 'success'
+  },
+  {
+    id: 'notif-008',
+    customerId: 'usr-cust-03',
+    title: 'Replacement Dispatched',
+    message: 'Warranty replacement unit dispatched under shipment reference TRK-DHM-991204.',
+    category: 'RETURN',
+    timestamp: '2026-10-28T09:05:00Z',
+    read: true,
+    link: '/customer/returns',
+    severity: 'info'
   }
 ];

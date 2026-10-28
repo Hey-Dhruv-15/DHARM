@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useData } from '../../context/DataContext';
 import {
   LayoutDashboard,
   Box,
@@ -15,6 +16,8 @@ import {
   Settings,
   Send,
   HelpCircle,
+  ShoppingBag,
+  Package,
   LogOut,
   ChevronRight,
   Shield
@@ -33,6 +36,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onMobileClose
 }) => {
   const { user, role, logout } = useAuth();
+  const { discrepancies } = useData();
+  const openExceptionsCount = discrepancies.filter(d => d.status !== 'Resolved').length;
   const location = useLocation();
 
   const getNavLinks = () => {
@@ -43,7 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { to: '/owner/containers', label: 'Containers', icon: Archive },
         { to: '/owner/shipments', label: 'Shipments & Manifests', icon: Truck },
         { to: '/owner/scanner', label: 'QR/Barcode Scanner', icon: ScanLine, highlight: true },
-        { to: '/owner/discrepancies', label: 'Discrepancy Engine', icon: AlertTriangle, badge: '2' },
+        { to: '/owner/discrepancies', label: 'Discrepancy Engine', icon: AlertTriangle, badge: openExceptionsCount > 0 ? openExceptionsCount.toString() : undefined },
         { to: '/owner/inventory', label: 'Master Inventory', icon: Layers },
         { to: '/owner/returns', label: 'Returns & Replacements', icon: RotateCcw },
         { to: '/owner/analytics', label: 'Logistics Analytics', icon: BarChart3 },
@@ -55,7 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { to: '/vendor/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { to: '/vendor/shipments', label: 'Incoming Shipments', icon: Truck },
         { to: '/vendor/scanner', label: 'Receipt Scanner', icon: ScanLine, highlight: true },
-        { to: '/vendor/discrepancies', label: 'Exceptions & Damaged', icon: AlertTriangle, badge: '1' },
+        { to: '/vendor/discrepancies', label: 'Exceptions & Damaged', icon: AlertTriangle, badge: openExceptionsCount > 0 ? openExceptionsCount.toString() : undefined },
         { to: '/vendor/inventory', label: 'Hub Stock', icon: Layers },
         { to: '/vendor/shipments/outgoing', label: 'Outgoing Deliveries', icon: Send },
         { to: '/vendor/returns', label: 'Quarantine & Returns', icon: RotateCcw },
@@ -64,9 +69,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } else {
       // CUSTOMER
       return [
-        { to: '/customer/dashboard', label: 'My Deliveries', icon: LayoutDashboard },
-        { to: '/customer/shipments', label: 'Order History', icon: Truck },
-        { to: '/customer/issues', label: 'Report a Problem', icon: HelpCircle },
+        { to: '/customer/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/customer/order', label: 'Order', icon: ShoppingBag },
+        { to: '/customer/orders', label: 'Order History', icon: Package },
+
         { to: '/customer/returns', label: 'Return Requests', icon: RotateCcw },
         { to: '/customer/profile', label: 'Account Profile', icon: Settings }
       ];
@@ -148,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {navLinks.map(link => {
             const Icon = link.icon;
-            const isLinkActive = location.pathname === link.to || (link.to !== '/owner/dashboard' && link.to !== '/vendor/dashboard' && link.to !== '/customer/dashboard' && location.pathname.startsWith(link.to));
+            const isLinkActive = location.pathname === link.to || (link.to !== '/owner/dashboard' && link.to !== '/vendor/dashboard' && link.to !== '/customer/dashboard' && location.pathname.startsWith(link.to + '/'));
 
             return (
               <NavLink

@@ -23,6 +23,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   const getPageTitle = () => {
     const p = location.pathname;
     if (p.includes('/dashboard')) return 'Overview Dashboard';
+    if (p.includes('/order') && !p.includes('/orders')) return 'Place Order';
+    if (p.includes('/orders')) return 'Order History';
+    if (p.includes('/verify')) return 'Product Traceability & QR Verification';
+    if (p.includes('/notifications')) return 'Notifications & Custody Feed';
     if (p.includes('/products/new')) return 'Register New Product';
     if (p.includes('/products')) return 'Product & SKU Catalog';
     if (p.includes('/containers')) return 'Containers & Tamper Seals';

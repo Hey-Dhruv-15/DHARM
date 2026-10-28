@@ -102,7 +102,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const switchRole = (newRole: UserRole) => {
     const cred = DEMO_CREDENTIALS[newRole];
     const u: User = {
-      id: `usr-${newRole.toLowerCase()}-auto`,
+      id: newRole === 'OWNER' ? 'usr-owner-01' : newRole === 'VENDOR' ? 'usr-vendor-02' : 'usr-cust-03',
       name: cred.name,
       email: cred.email,
       role: newRole,

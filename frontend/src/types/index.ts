@@ -118,12 +118,21 @@ export interface Shipment {
   actualDelivery?: string;
   events: ShipmentEvent[];
   notes?: string;
+  delayReason?: string;
+  proofOfDelivery?: {
+    receivedBy: string;
+    timestamp: string;
+    notes?: string;
+    signatureVerificationHash?: string;
+  };
 }
 
 export interface DiscrepancyEvidence {
   id: string;
   type: 'Photo' | 'Scan Log' | 'Manifest Compare' | 'Inspection Report';
   url?: string;
+  fileName?: string;
+  fileSize?: number;
   description: string;
   timestamp: string;
   uploadedBy: string;
@@ -134,6 +143,10 @@ export interface DiscrepancyCase {
   discrepancyNumber: string;
   shipmentId: string;
   shipmentTracking: string;
+  orderId?: string;
+  orderNumber?: string;
+  customerId?: string;
+  customerName?: string;
   containerId?: string;
   containerNumber?: string;
   productId?: string;
@@ -148,6 +161,7 @@ export interface DiscrepancyCase {
   detectedBy: string;
   assignedInvestigator?: string;
   evidence: DiscrepancyEvidence[];
+  preferredResolution?: 'Replacement' | 'Return' | 'Refund' | 'Assistance';
   resolutionNotes?: string;
   resolutionOutcome?: 'Approved Replacement' | 'Inventory Adjusted' | 'Found in Other Container' | 'Supplier Credit' | 'Pending';
   detectedAt: string;
@@ -172,17 +186,22 @@ export interface ReturnCase {
   returnNumber: string;
   originalShipmentId: string;
   trackingNumber: string;
+  orderId?: string;
+  orderNumber?: string;
   customerId: string;
   customerName: string;
   productId: string;
   productName: string;
   quantity: number;
   reason: 'Damaged in Transit' | 'Incorrect Item Received' | 'Defective Unit' | 'Customer Cancellation';
+  productCondition?: 'Unopened Original Packaging' | 'Damaged Exterior Seal' | 'Defective Internals' | 'Broken Seal';
   status: 'Requested' | 'Pickup Scheduled' | 'Received at Hub' | 'Inspected' | 'Quarantined' | 'Replacement Dispatched' | 'Closed';
   evidencePhotos: string[];
   inspectionNotes?: string;
   quarantineLocation?: string;
   replacementShipmentId?: string;
+  refundStatus?: 'Pending Inspection' | 'Processed to Account' | 'Not Applicable';
+  resolutionDate?: string;
   requestedAt: string;
   updatedAt: string;
 }
@@ -197,4 +216,139 @@ export interface AuditEvent {
   entityId: string;
   details: string;
   ipAddress?: string;
+}
+
+// -------------------------------------------------------------
+// Customer Portal Domain Types
+// -------------------------------------------------------------
+
+export type CustomerType = 'individual' | 'business';
+
+export interface CustomerAddress {
+  id: string;
+  label: string;
+  contactName: string;
+  phone: string;
+  street: string;
+  city: string;
+  state: string;
+  pinCode: string;
+  isDefault: boolean;
+  deliveryInstructions?: string;
+}
+
+export interface BillingAddress {
+  street: string;
+  city: string;
+  state: string;
+  pinCode: string;
+  country: string;
+}
+
+export interface CustomerProfileData {
+  customerId: string;
+  userId: string;
+  customerType: CustomerType;
+  name: string;
+  companyName?: string;
+  email: string;
+  mobile: string;
+  gstin?: string;
+  accountStatus: 'Active' | 'Pending Verification' | 'Suspended';
+  createdAt: string;
+  billingAddress: BillingAddress;
+  savedAddresses: CustomerAddress[];
+}
+
+export type OrderStatus =
+  | 'Placed'
+  | 'Confirmed'
+  | 'Processing'
+  | 'Dispatched'
+  | 'Delivered'
+  | 'Cancelled';
+
+export type PaymentStatus =
+  | 'Paid'
+  | 'Pending'
+  | 'Invoice Pending'
+  | 'Refunded';
+
+export interface OrderItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  image?: string;
+  quantity: number;
+  unitPrice: number;
+  gstRate: number;
+  totalPrice: number;
+}
+
+export interface Order {
+  id: string;
+  orderNumber: string;
+  customerId: string;
+  customerName: string;
+  orderDate: string;
+  status: OrderStatus;
+  expectedDeliveryDate: string;
+  paymentStatus: PaymentStatus;
+  paymentMethod: string;
+  items: OrderItem[];
+  subtotal: number;
+  taxTotal: number;
+  grandTotal: number;
+  shippingAddress: CustomerAddress;
+  billingAddress: BillingAddress;
+  customerPoNumber?: string;
+  logisticsProvider?: string;
+  shipmentId?: string;
+  trackingNumber?: string;
+  invoiceNumber?: string;
+  invoiceAvailable: boolean;
+  canCancel: boolean;
+  cancellationReason?: string;
+  cancelledAt?: string;
+}
+
+export type NotificationCategory =
+  | 'ORDER'
+  | 'SHIPMENT'
+  | 'VERIFICATION'
+  | 'DISCREPANCY'
+  | 'RETURN';
+
+export interface CustomerNotification {
+  id: string;
+  customerId: string;
+  title: string;
+  message: string;
+  category: NotificationCategory;
+  timestamp: string;
+  read: boolean;
+  link?: string;
+  severity?: 'info' | 'success' | 'warning' | 'error';
+}
+
+export interface ProductVerificationResult {
+  valid: boolean;
+  status: 'VERIFIED' | 'MISMATCH_DETECTED' | 'VERIFICATION_PENDING' | 'DUPLICATE_SCAN' | 'INVALID_CODE';
+  message: string;
+  scannedCode: string;
+  product?: Product;
+  shipment?: Shipment;
+  order?: Order;
+  batchNumber?: string;
+  serialNumber?: string;
+  expectedQuantity?: number;
+  verifiedQuantity?: number;
+  custodyEvents?: Array<{
+    timestamp: string;
+    stage: string;
+    organization: string;
+    location: string;
+    verifiedBy: string;
+    status: string;
+  }>;
 }

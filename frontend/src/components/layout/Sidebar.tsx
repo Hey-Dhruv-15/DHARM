@@ -18,8 +18,7 @@ import {
   ShoppingBag,
   Package,
   LogOut,
-  ChevronRight,
-  Shield
+  ChevronRight
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -77,15 +76,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const roleStyles = {
     OWNER: {
-      badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
       tag: 'Product Owner'
     },
     VENDOR: {
-      badge: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
       tag: 'Vendor Logistics Hub'
     },
     CUSTOMER: {
-      badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
       tag: 'Verified Customer'
     }
   };
@@ -128,17 +124,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Role Identity Tag */}
         {!collapsed && (
           <div className="px-4 py-3 border-b border-slate-800/60 bg-slate-900/40">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                Active Perspective
-              </span>
-              <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${currentRoleStyle.badge}`}
-              >
-                {role}
-              </span>
-            </div>
-            <p className="text-xs font-semibold text-slate-200 mt-1 truncate">
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
+              Active Perspective
+            </span>
+            <p className="text-xs font-semibold text-slate-200 mt-0.5 truncate">
               {currentRoleStyle.tag}
             </p>
           </div>
@@ -186,19 +175,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
         </div>
-
-        {/* System Trust & Security Footer */}
-        {!collapsed && (
-          <div className="p-3 mx-3 mb-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
-            <div className="flex items-center gap-2 text-slate-400 text-[11px] font-semibold">
-              <Shield className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Cryptographic Audit Mode</span>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-              Every barcode scan & handover is hashed to an immutable log.
-            </p>
-          </div>
-        )}
 
         {/* User Card & Logout Bottom */}
         <div className="p-3 border-t border-slate-800/80 bg-slate-900/80">

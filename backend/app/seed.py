@@ -7,6 +7,12 @@ import sys
 import os
 from datetime import datetime, timedelta
 
+# Ensure UTF-8 output on Windows consoles
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -21,13 +27,13 @@ from app.models.audit import AuditEvent
 
 
 def seed_database():
-    print("🚀 Initializing database tables...")
+    print("[INIT] Initializing database tables...")
     init_db()
     db = SessionLocal()
 
     try:
         # 1. Seed Users
-        print("👤 Checking users...")
+        print("[USERS] Checking users...")
         demo_users = [
             {
                 "id": "usr-owner-01",
@@ -36,7 +42,7 @@ def seed_database():
                 "role": UserRoleEnum.OWNER,
                 "organization": "Apex Global Logistics & Medical Supply",
                 "location": "Central Distribution Center, Hub Alpha",
-                "avatar": "👑"
+                "avatar": "Owner"
             },
             {
                 "id": "usr-vendor-02",
@@ -45,7 +51,7 @@ def seed_database():
                 "role": UserRoleEnum.VENDOR,
                 "organization": "Trans-Express Regional Logistics",
                 "location": "Midwest Sorting & Cross-Dock Hub 4",
-                "avatar": "🏢"
+                "avatar": "Vendor"
             },
             {
                 "id": "usr-cust-03",
@@ -54,7 +60,7 @@ def seed_database():
                 "role": UserRoleEnum.CUSTOMER,
                 "organization": "BioMed Advanced Research Diagnostics",
                 "location": "BioMed Campus Bay 2, Tech Park",
-                "avatar": "🔬"
+                "avatar": "Customer"
             }
         ]
 
@@ -75,7 +81,7 @@ def seed_database():
                 print(f"  + Added user: {u_data['email']} ({u_data['role'].value})")
 
         # 2. Seed Master Catalog Products
-        print("📦 Checking products...")
+        print("[PRODUCTS] Checking products...")
         initial_products = [
             {
                 "id": "prod-sas-01",
@@ -176,7 +182,7 @@ def seed_database():
                 print(f"  + Added product: {p_data['name']} ({p_data['sku']})")
 
         # 3. Seed Containers
-        print("🛡 Checking tamper-evident containers...")
+        print("[CONTAINERS] Checking tamper-evident containers...")
         initial_containers = [
             {
                 "id": "cnt-001",
@@ -232,7 +238,7 @@ def seed_database():
                 print(f"  + Added container: {c_data['container_number']}")
 
         # 4. Seed Initial Shipment
-        print("🚚 Checking shipments...")
+        print("[SHIPMENTS] Checking shipments...")
         existing_shp = db.query(Shipment).filter(Shipment.id == "shp-2026-101").first()
         if not existing_shp:
             shipment = Shipment(
@@ -307,25 +313,27 @@ def seed_database():
             print("  + Added shipment: DHRM-TRK-77421")
 
         # 5. Seed Audit Event
-        print("📑 Checking audit log...")
-        aud = AuditEvent(
-            id="aud-init-01",
-            actor_name="Dhruva (Owner)",
-            actor_role="OWNER",
-            action="SYSTEM_INIT",
-            entity_type="System",
-            entity_id="sys-dharm",
-            details="DHARM ERP backend initialized with PostgreSQL master ledger.",
-            timestamp=datetime.utcnow()
-        )
-        db.add(aud)
+        print("[AUDIT] Checking audit log...")
+        aud = db.query(AuditEvent).filter(AuditEvent.id == "aud-init-01").first()
+        if not aud:
+            aud = AuditEvent(
+                id="aud-init-01",
+                actor_name="Dhruva (Owner)",
+                actor_role="OWNER",
+                action="SYSTEM_INIT",
+                entity_type="System",
+                entity_id="sys-dharm",
+                details="DHARM ERP backend initialized with PostgreSQL master ledger.",
+                timestamp=datetime.utcnow()
+            )
+            db.add(aud)
 
         db.commit()
-        print("✅ Database seeding completed successfully!")
+        print("[SUCCESS] Database tables verified and seeded successfully!")
 
     except Exception as e:
         db.rollback()
-        print(f"❌ Error during database seeding: {e}")
+        print(f"[ERROR] Error during database seeding: {e}")
         raise e
     finally:
         db.close()

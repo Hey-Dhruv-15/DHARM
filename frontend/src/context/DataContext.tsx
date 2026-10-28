@@ -907,6 +907,58 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     logAudit(actorName, role, 'DISCREPANCY_LOGGED', 'Discrepancy', newCase.id, `Reported discrepancy ${num} (${data.type}) on shipment ${data.shipmentTracking}`);
+
+    // Sync with FastAPI backend POST /api/discrepancies/report
+    try {
+      fetch('http://localhost:8000/api/discrepancies/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shipmentId: data.shipmentId,
+          shipmentTracking: data.shipmentTracking,
+          productId: data.productId,
+          productName: data.productName,
+          sku: data.sku,
+          discrepancyType: data.type,
+          severity: data.severity,
+          expectedUnits: data.expectedQuantity,
+          observedPhysicalUnits: data.observedQuantity,
+          inspectionEvidenceNotes: data.resolutionNotes || (data.evidence?.[0]?.description),
+          notes: data.resolutionNotes,
+          containerId: data.containerId,
+          containerNumber: data.containerNumber,
+          detectionStage: data.detectionStage,
+          detectedBy: actorName || data.detectedBy,
+          evidencePhotos: data.evidence?.map(e => e.url).filter(Boolean) || []
+        })
+      })
+        .then(async res => {
+          if (res.ok) {
+            const body = await res.json();
+            if (body.discrepancy) {
+              setDiscrepancies(prev =>
+                prev.map(d =>
+                  d.id === newCase.id
+                    ? {
+                        ...d,
+                        id: body.discrepancy.id,
+                        discrepancyNumber:
+                          body.discrepancy.discrepancyNumber ||
+                          body.discrepancy.discrepancy_number ||
+                          d.discrepancyNumber
+                      }
+                    : d
+                )
+              );
+            }
+          }
+        })
+        .catch(err => {
+          console.warn('Backend discrepancy report sync notice:', err);
+        });
+    } catch (e) {
+      console.warn('Backend discrepancy report error:', e);
+    }
     return newCase;
   };
 
@@ -933,6 +985,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
     logAudit(actorName, role, 'DISCREPANCY_STATUS_CHANGED', 'Discrepancy', id, `Updated discrepancy to status: ${status}. Outcome: ${outcome || 'In Progress'}`);
+
+    try {
+      fetch(`http://localhost:8000/api/discrepancies/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status,
+          resolutionNotes: notes,
+          resolutionOutcome: outcome
+        })
+      }).catch(err => console.warn('Update discrepancy notice:', err));
+    } catch (e) {}
   };
 
   const confirmCustomerDelivery = (shipmentId: string, actorName: string, notes: string) => {

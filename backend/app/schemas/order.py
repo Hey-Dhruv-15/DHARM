@@ -146,3 +146,42 @@ class OrderDeliverResponse(BaseModel):
 
     class Config:
         populate_by_name = True
+
+
+class OrderProblemReportRequest(BaseModel):
+    product_id: str = Field(..., alias="productId")
+    product_name: Optional[str] = Field(default=None, alias="productName")
+    sku: Optional[str] = None
+    problem_category: str = Field(..., alias="problemCategory")
+    preferred_resolution: str = Field(default="Replacement", alias="preferredResolution")
+    delivered_units: int = Field(default=1, ge=1, alias="deliveredUnits")
+    defective_units: int = Field(default=1, ge=1, alias="defectiveUnits")
+    description: str = Field(..., min_length=2)
+    evidence_photos: Optional[List[str]] = Field(default=[], alias="evidencePhotos")
+
+    class Config:
+        populate_by_name = True
+
+
+class VendorExceptionResponse(BaseModel):
+    success: bool = True
+    message: str
+    order_id: str = Field(..., alias="orderId")
+    order_number: str = Field(..., alias="orderNumber")
+    customer_po_reference: Optional[str] = Field(default=None, alias="customerPoReference")
+    discrepancy_id: str = Field(..., alias="discrepancyId")
+    discrepancy_number: str = Field(..., alias="discrepancyNumber")
+    return_id: str = Field(..., alias="returnId")
+    return_number: str = Field(..., alias="returnNumber")
+    vendor_module: str = Field(default="Exceptions & Damaged", alias="vendorModule")
+    target_quarantine_bay: str = Field(default="Vendor Hub Quarantine Bay Q-4B", alias="targetQuarantineBay")
+    product_name: str = Field(..., alias="productName")
+    sku: Optional[str] = None
+    defective_units: int = Field(..., alias="defectiveUnits")
+    problem_category: str = Field(..., alias="problemCategory")
+    customer_resolution_preference: str = Field(..., alias="customerResolutionPreference")
+    vendor_verification_pending: bool = Field(default=True, alias="vendorVerificationPending")
+    created_at: datetime = Field(..., alias="createdAt")
+
+    class Config:
+        populate_by_name = True

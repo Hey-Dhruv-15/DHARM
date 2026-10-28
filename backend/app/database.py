@@ -159,17 +159,65 @@ def _sync_container_products_table():
         logger.warning(f"container_products table sync warning: {ex}")
 
 
+def _sync_sqlite_columns():
+    """Ensure all model columns exist in SQLite tables."""
+    if not str(engine.url).startswith("sqlite"):
+        return
+    try:
+        with engine.connect() as conn:
+            cursor = conn.connection.cursor()
+            for table_name, table in Base.metadata.tables.items():
+                cursor.execute(f"PRAGMA table_info({table_name})")
+                existing_cols = {row[1] for row in cursor.fetchall()}
+                if not existing_cols:
+                    continue
+                for col in table.columns:
+                    if col.name not in existing_cols:
+                        col_type = col.type.compile(engine.dialect)
+                        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}")
+            conn.connection.commit()
+    except Exception as ex:
+        logger.warning(f"SQLite column auto-migration warning: {ex}")
+
+
 def init_db():
-    """Create all tables in the database."""
+    """Create all tables in the database and auto-migrate missing columns."""
     global engine, SessionLocal
     try:
         import app.models  # noqa: F401
+        from sqlalchemy import text
         Base.metadata.create_all(bind=engine)
         _sync_product_columns()
         _sync_container_columns()
         _sync_shipment_columns()
         _sync_container_products_table()
-        logger.info("Database tables verified/created successfully.")
+        _sync_sqlite_columns()
+
+        # Auto-migrate any newly added model columns to existing tables in PostgreSQL
+        if not str(engine.url).startswith("sqlite"):
+            try:
+                with engine.begin() as conn:
+                    for table_name, table in Base.metadata.tables.items():
+                        res = conn.execute(text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_name = :tname AND table_schema = 'public'"
+                        ), {"tname": table_name})
+                        existing_cols = {row[0] for row in res.fetchall()}
+
+                        if not existing_cols:
+                            continue
+
+                        for col in table.columns:
+                            if col.name not in existing_cols:
+                                col_type = col.type.compile(engine.dialect)
+                                nullable = "NULL" if col.nullable else "NOT NULL DEFAULT ''"
+                                conn.execute(text(
+                                    f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "{col.name}" {col_type} {nullable};'
+                                ))
+            except Exception as migrate_err:
+                logger.warning(f"PostgreSQL column auto-migration warning: {migrate_err}")
+
+        logger.info("Database tables and columns verified/created successfully.")
     except Exception as e:
         logger.warning(f"Error creating database tables with primary engine: {e}. Retrying with SQLite fallback.")
         engine = get_engine("sqlite:///./dharm.db")
@@ -179,6 +227,7 @@ def init_db():
         _sync_container_columns()
         _sync_shipment_columns()
         _sync_container_products_table()
+        _sync_sqlite_columns()
         logger.info("Database tables verified/created successfully in SQLite fallback.")
 
 

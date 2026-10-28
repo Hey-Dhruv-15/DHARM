@@ -71,7 +71,7 @@ export const OwnerContainers: React.FC = () => {
   // Dropdown menu state for cards
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
-  // 1. Container Information Form State
+  // Container Information Form State
   const [containerNumber, setContainerNumber] = useState('');
   const [containerType, setContainerType] = useState<ContainerType>('Cold-Chain Bin');
   const [maxCapacity, setMaxCapacity] = useState<number>(150);

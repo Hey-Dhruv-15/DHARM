@@ -18,7 +18,9 @@ import {
   Sparkles,
   ClipboardCheck,
   FileText,
-  MapPin
+  MapPin,
+  LayoutList,
+  LayoutGrid
 } from 'lucide-react';
 import type { ReturnCase, CustomerResolutionChoice } from '../../types';
 
@@ -37,6 +39,7 @@ export const CustomerDamagedReports: React.FC = () => {
   const [search, setSearch] = useState('');
   const [choiceFilter, setChoiceFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
 
   // Modals
   const [inspectModalOpen, setInspectModalOpen] = useState(false);
@@ -173,11 +176,34 @@ export const CustomerDamagedReports: React.FC = () => {
   };
 
   // Create New Customer Damage Claim
-  const handleCreateClaim = (e: React.FormEvent) => {
+  const handleCreateClaim = async (e: React.FormEvent) => {
     e.preventDefault();
     const ship = shipments.find(s => s.id === newShipmentId);
     const prod = products.find(p => p.id === newProductId);
     const basePrice = prod?.grossPrice ?? prod?.unitPrice ?? 14500;
+
+    // Persist to backend PostgreSQL API
+    try {
+      await fetch('http://localhost:8000/api/returns/customer-damaged', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shipment_id: newShipmentId,
+          tracking_number: ship ? ship.trackingNumber : 'TRK-UNKNOWN',
+          product_id: prod?.id || 'prod-001',
+          product_name: prod?.name || 'Sample Product',
+          sku: prod?.sku || 'GEN-SKU',
+          quantity: 1,
+          customer_name: newCustomerName,
+          customer_id: 'usr-cust-03',
+          reason: newReason,
+          desired_resolution: newChoice,
+          notes: newNotes || 'Customer called in report of damaged unit upon arrival.'
+        })
+      });
+    } catch (err) {
+      console.warn('Backend API call note:', err);
+    }
 
     const created = createReturnRequest(
       {
@@ -363,11 +389,199 @@ export const CustomerDamagedReports: React.FC = () => {
               </button>
             ))}
           </div>
+
+          {/* View Mode Switcher: List View vs Cards */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                viewMode === 'list'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="List View"
+            >
+              <LayoutList className="w-3.5 h-3.5" />
+              <span>List View</span>
+            </button>
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                viewMode === 'cards'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Card View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Cards</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Claims List Cards */}
-      <div className="space-y-4">
+      {/* Claims Display: List View vs Cards */}
+      {viewMode === 'list' ? (
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/80 border-b border-slate-200/70 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  <th className="py-3.5 px-4">Claim Ref & Date</th>
+                  <th className="py-3.5 px-4">Customer & Order</th>
+                  <th className="py-3.5 px-4">Product / SKU</th>
+                  <th className="py-3.5 px-4">Problem Reason</th>
+                  <th className="py-3.5 px-4">Settlement Choice</th>
+                  <th className="py-3.5 px-4">Physical Inspection & Quarantine</th>
+                  <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                {filtered.map(r => {
+                  const isVerified = r.vendorVerified;
+                  const choice = r.customerChoice || 'Replace Product';
+                  const isReplacementDispatched = r.status === 'Replacement Dispatched';
+                  const isRefundProcessed = r.status === 'Refund Processed';
+
+                  return (
+                    <tr key={r.id} className="hover:bg-slate-50/60 transition group">
+                      <td className="py-3.5 px-4 align-top">
+                        <div className="font-mono font-extrabold text-slate-900 text-sm">
+                          {r.returnNumber}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          {new Date(r.requestedAt).toLocaleDateString()}
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4 align-top">
+                        <div className="font-semibold text-slate-900">{r.customerName}</div>
+                        <div className="font-mono text-[11px] text-indigo-600 font-medium mt-0.5 flex items-center gap-1">
+                          <Truck className="w-3 h-3 text-indigo-400" />
+                          <span>{r.trackingNumber}</span>
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4 align-top">
+                        <div className="font-semibold text-slate-900">{r.productName}</div>
+                        <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                          SKU: {r.sku || 'N/A'} • <span className="font-semibold text-slate-700">{r.quantity} unit</span>
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4 align-top max-w-xs">
+                        <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                          {r.reason}
+                        </span>
+                        <p className="text-[11px] text-slate-500 truncate mt-1" title={r.problemDiagnosis || r.inspectionNotes || ''}>
+                          {r.problemDiagnosis || r.inspectionNotes || 'Damaged unit reported upon arrival.'}
+                        </p>
+                      </td>
+
+                      <td className="py-3.5 px-4 align-top">
+                        {choice === 'Replace Product' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <PackageCheck className="w-3.5 h-3.5" />
+                            <span>Replace Product</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                            <CreditCard className="w-3.5 h-3.5" />
+                            <span>Refund Amount</span>
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-3.5 px-4 align-top">
+                        {isVerified ? (
+                          <div>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Defect Verified</span>
+                            </span>
+                            <div className="text-[10px] font-mono text-slate-500 mt-0.5 flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-slate-400" />
+                              <span>{r.quarantineLocation || 'Quarantine Bay Q-4B'}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            <AlertTriangle className="w-3 h-3 text-amber-500" />
+                            <span>Check Pending</span>
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-3.5 px-4 align-top">
+                        <StatusBadge status={r.status} size="sm" />
+                      </td>
+
+                      <td className="py-3.5 px-4 align-top text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenInspect(r)}
+                            className="px-2.5 py-1 text-xs font-bold rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 transition flex items-center gap-1 cursor-pointer"
+                            title={isVerified ? 'Review Physical Inspection' : 'Inspect Defect'}
+                          >
+                            <ClipboardCheck className="w-3.5 h-3.5 text-slate-500" />
+                            <span>{isVerified ? 'Inspected' : 'Inspect'}</span>
+                          </button>
+
+                          {choice === 'Replace Product' ? (
+                            isReplacementDispatched ? (
+                              <span className="px-2 py-1 text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-200">
+                                {r.replacementShipmentId || 'Dispatched'}
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleOpenReplacementModal(r)}
+                                disabled={!isVerified}
+                                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold rounded-lg shadow-xs transition flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed"
+                                title={isVerified ? 'Dispatch Replacement Unit' : 'Inspect First'}
+                              >
+                                <Truck className="w-3.5 h-3.5" />
+                                <span>Dispatch</span>
+                              </button>
+                            )
+                          ) : (
+                            isRefundProcessed ? (
+                              <span className="px-2 py-1 text-[11px] font-mono font-bold text-purple-700 bg-purple-50 rounded-lg border border-purple-200">
+                                {r.refundReference || 'Refunded'}
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleOpenRefundModal(r)}
+                                disabled={!isVerified}
+                                className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white text-xs font-bold rounded-lg shadow-xs transition flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed"
+                                title={isVerified ? 'Authorize & Issue Refund' : 'Inspect First'}
+                              >
+                                <CreditCard className="w-3.5 h-3.5" />
+                                <span>Refund</span>
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                      <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2 opacity-60" />
+                      <h4 className="text-sm font-bold text-slate-800">No matching customer damage claims</h4>
+                      <p className="text-xs mt-1">All customer return reports match current filter criteria.</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
         {filtered.map(r => {
           const isVerified = r.vendorVerified;
           const choice = r.customerChoice || 'Replace Product';
@@ -615,6 +829,8 @@ export const CustomerDamagedReports: React.FC = () => {
           </div>
         )}
       </div>
+
+      )}
 
       {/* MODAL 1: Vendor Physical Defect Inspection Workbench */}
       {selectedReturn && (

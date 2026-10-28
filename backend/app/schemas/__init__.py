@@ -21,7 +21,8 @@ from app.schemas.return_case import ReturnCaseBase, ReturnCaseCreate, ReturnCase
 from app.schemas.audit import AuditEventBase, AuditEventCreate, AuditEventOut
 from app.schemas.order import (
     OrderCreate, OrderOut, OrderItemCreate, OrderItemOut, OrderStatusUpdate,
-    OrderCancelRequest, OrderDeliveryRequest, OrderHistoryOut, OrderDeliverResponse
+    OrderCancelRequest, OrderDeliveryRequest, OrderHistoryOut, OrderDeliverResponse,
+    OrderProblemReportRequest, VendorExceptionResponse
 )
 
 __all__ = [
@@ -39,5 +40,6 @@ __all__ = [
     "ReturnCaseBase", "ReturnCaseCreate", "ReturnCaseUpdate", "ReturnCaseOut",
     "AuditEventBase", "AuditEventCreate", "AuditEventOut",
     "OrderCreate", "OrderOut", "OrderItemCreate", "OrderItemOut", "OrderStatusUpdate",
-    "OrderCancelRequest", "OrderDeliveryRequest", "OrderHistoryOut", "OrderDeliverResponse"
+    "OrderCancelRequest", "OrderDeliveryRequest", "OrderHistoryOut", "OrderDeliverResponse",
+    "OrderProblemReportRequest", "VendorExceptionResponse"
 ]

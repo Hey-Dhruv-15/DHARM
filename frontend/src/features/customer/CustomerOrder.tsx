@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
+import { orderApi } from '../../services/orderApi';
 import { useAuth } from '../../context/AuthContext';
 import { Modal } from '../../components/common/Modal';
 import {
@@ -33,6 +34,7 @@ export const CustomerOrder: React.FC = () => {
   const { user } = useAuth();
   const {
     orders,
+    refreshOrders,
     products,
     customerProfile,
     placeCustomerOrder,
@@ -44,6 +46,7 @@ export const CustomerOrder: React.FC = () => {
 
   // Search & Filter State
   const [search, setSearch] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
 

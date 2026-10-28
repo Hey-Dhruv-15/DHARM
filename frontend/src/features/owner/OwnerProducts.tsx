@@ -3,14 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { Modal } from '../../components/common/Modal';
+import { productApi } from '../../services/productApi';
 import {
   Plus,
   MoreVertical,
-  QrCode,
   Edit,
+  Eye,
   Trash2,
   Box,
-  Eye,
   Check,
   CheckCircle2,
   Copy,
@@ -18,7 +18,15 @@ import {
   Camera,
   CameraOff,
   X,
-  ShieldCheck
+  ShieldCheck,
+  FileText,
+  Tag,
+  Layers,
+  Calendar,
+  IndianRupee,
+  Package,
+  RefreshCw,
+  QrCode
 } from 'lucide-react';
 import { BrowserQRCodeSvgWriter } from '@zxing/browser';
 import { Html5Qrcode } from 'html5-qrcode';
@@ -88,6 +96,7 @@ export const OwnerProducts: React.FC = () => {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [actionMenuOpenId, setActionMenuOpenId] = useState<string | null>(null);
+  const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(false);
 
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
@@ -102,6 +111,21 @@ export const OwnerProducts: React.FC = () => {
   const formatGst = (rate: number | undefined | null): string => {
     if (rate === undefined || rate === null) return '18%';
     return rate === 0.1 ? '0.10%' : `${rate}%`;
+  };
+
+  const handleGetDetails = async (product: Product) => {
+    setDetailsModalProduct(product);
+    setIsLoadingDetails(true);
+    try {
+      const liveProd = await productApi.getProduct(product.id);
+      if (liveProd) {
+        setDetailsModalProduct(liveProd);
+      }
+    } catch {
+      // Kept fallback to product in state
+    } finally {
+      setIsLoadingDetails(false);
+    }
   };
 
   const handleDelete = (id: string, name: string) => {
@@ -231,7 +255,7 @@ export const OwnerProducts: React.FC = () => {
         </div>
       )}
 
-      {/* Top Action: Only Add Product */}
+      {/* Top Action: Add Product */}
       <div className="flex items-center justify-end">
         <button
           onClick={() => navigate('/owner/products/new')}
@@ -276,7 +300,7 @@ export const OwnerProducts: React.FC = () => {
                       <div className="flex flex-col">
                         <button
                           type="button"
-                          onClick={() => setDetailsModalProduct(p)}
+                          onClick={() => handleGetDetails(p)}
                           className={`text-left font-semibold text-xs sm:text-sm tracking-tight ${
                             isBlueLink
                               ? 'text-blue-600 hover:text-blue-800 hover:underline cursor-pointer'
@@ -376,11 +400,11 @@ export const OwnerProducts: React.FC = () => {
                             <button
                               onClick={() => {
                                 setActionMenuOpenId(null);
-                                setDetailsModalProduct(p);
+                                handleGetDetails(p);
                               }}
                               className="w-full px-3.5 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition"
                             >
-                              <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                              <Eye className="w-3.5 h-3.5 text-indigo-600" />
                               <span>View Details</span>
                             </button>
 
@@ -437,46 +461,105 @@ export const OwnerProducts: React.FC = () => {
         )}
       </div>
 
-      {/* Product Details Modal */}
+      {/* Product Specification & Details Modal (GET /api/products/{id}) */}
       {detailsModalProduct && (
         <Modal
           isOpen={!!detailsModalProduct}
           onClose={() => setDetailsModalProduct(null)}
-          title={detailsModalProduct.name}
-          subtitle="Catalog Specifications, Commercials & Tamper-Evident QR Tracking"
+          title={`Product Details: ${detailsModalProduct.name}`}
+          subtitle={`SKU: ${detailsModalProduct.sku} • System ID: ${detailsModalProduct.id}`}
           maxWidth="lg"
         >
-          <div className="space-y-5">
-            {/* Top Identity Card */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-50 to-indigo-50/40 border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <div className="space-y-6">
+            {/* Header Highlights Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Status</span>
+                <div className="mt-1">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                     {detailsModalProduct.status || 'Active'}
                   </span>
-                  <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-white text-slate-600 border border-slate-200">
-                    {detailsModalProduct.category || 'General / Uncategorized'}
-                  </span>
-                  <span className="px-2.5 py-0.5 text-xs font-mono font-medium rounded-full bg-slate-100 text-slate-700">
-                    SKU: {detailsModalProduct.sku}
-                  </span>
                 </div>
-                <h3 className="text-base font-bold text-slate-900 pt-1">
-                  {detailsModalProduct.name}
-                </h3>
               </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Category</span>
+                <p className="text-xs font-semibold text-slate-800 mt-1 truncate">
+                  {detailsModalProduct.category || 'General / Uncategorized'}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Billing Unit</span>
+                <p className="text-xs font-semibold text-slate-800 mt-1">
+                  {detailsModalProduct.billingUnit || 'One-time'}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Stock Available</span>
+                <p className="text-xs font-semibold text-slate-800 mt-1">
+                  {detailsModalProduct.stockQuantity ?? 100} units
+                </p>
+              </div>
+            </div>
 
-              <button
-                onClick={() => {
-                  const target = detailsModalProduct;
-                  setDetailsModalProduct(null);
-                  openAssignQrModal(target);
-                }}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer shrink-0"
-              >
-                <QrCode className="w-3.5 h-3.5" />
-                <span>Assign / Update QR</span>
-              </button>
+            {/* Financial Breakdown */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden">
+              <div className="bg-slate-100/70 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <IndianRupee className="w-3.5 h-3.5 text-slate-600" />
+                  Tax & Pricing Breakdown
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">REST: GET /api/products/{detailsModalProduct.id}</span>
+              </div>
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+                <div className="bg-white p-3 rounded-lg border border-slate-100">
+                  <span className="text-xs text-slate-500 font-medium">List Price (Excl. Taxes)</span>
+                  <p className="text-base font-extrabold text-slate-900 mt-1 font-mono">
+                    ₹{formatPrice(detailsModalProduct.unitPrice)}
+                  </p>
+                </div>
+                <div className="bg-white p-3 rounded-lg border border-slate-100">
+                  <span className="text-xs text-slate-500 font-medium">GST Rate Applicable</span>
+                  <p className="text-base font-extrabold text-indigo-600 mt-1 font-mono">
+                    {formatGst(detailsModalProduct.gstRate)}
+                  </p>
+                </div>
+                <div className="bg-white p-3 rounded-lg border border-slate-100">
+                  <span className="text-xs text-slate-500 font-medium">Total Gross Price (Incl. GST)</span>
+                  <p className="text-base font-extrabold text-emerald-600 mt-1 font-mono">
+                    ₹{formatPrice(
+                      detailsModalProduct.grossPrice !== undefined
+                        ? detailsModalProduct.grossPrice
+                        : detailsModalProduct.unitPrice +
+                          (detailsModalProduct.unitPrice * (detailsModalProduct.gstRate ?? 18)) / 100
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Deliverables / Description */}
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-slate-600" />
+                Deliverables & Specifications
+              </span>
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 text-xs text-slate-700 leading-relaxed min-h-[60px]">
+                {detailsModalProduct.deliverables || detailsModalProduct.description || (
+                  <span className="text-slate-400 italic">No additional deliverables or scope descriptions registered for this catalog item.</span>
+                )}
+              </div>
+            </div>
+
+            {/* System Barcode & Trace Metadata */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50/60 p-3 rounded-xl border border-slate-200/60">
+              <div>
+                <span className="text-slate-400 font-medium">Internal Barcode / Tracking:</span>
+                <p className="font-mono font-semibold text-slate-800 mt-0.5">{detailsModalProduct.barcode || detailsModalProduct.sku}</p>
+              </div>
+              <div>
+                <span className="text-slate-400 font-medium">Serialized Item:</span>
+                <p className="font-semibold text-slate-800 mt-0.5">{detailsModalProduct.isSerialized ? 'Yes (Unit serial tracking active)' : 'No (Batch / SKU level)'}</p>
+              </div>
             </div>
 
             {/* QR Identity & Verification Box */}
@@ -549,107 +632,26 @@ export const OwnerProducts: React.FC = () => {
               </div>
             </div>
 
-            {/* Financial & Pricing Details */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60">
-                <span className="text-[11px] font-semibold text-slate-400 block uppercase tracking-wider">
-                  List Price (Excl. Tax)
-                </span>
-                <span className="text-sm sm:text-base font-bold font-mono text-slate-900 mt-0.5 block">
-                  ₹{formatPrice(detailsModalProduct.unitPrice)}
-                </span>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60">
-                <span className="text-[11px] font-semibold text-slate-400 block uppercase tracking-wider">
-                  GST Rate
-                </span>
-                <span className="text-sm sm:text-base font-bold font-mono text-slate-900 mt-0.5 block">
-                  {formatGst(detailsModalProduct.gstRate)}
-                </span>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60">
-                <span className="text-[11px] font-semibold text-slate-400 block uppercase tracking-wider">
-                  Gross Price (Incl. GST)
-                </span>
-                <span className="text-sm sm:text-base font-bold font-mono text-indigo-600 mt-0.5 block">
-                  ₹
-                  {formatPrice(
-                    detailsModalProduct.grossPrice !== undefined
-                      ? detailsModalProduct.grossPrice
-                      : detailsModalProduct.unitPrice +
-                          (detailsModalProduct.unitPrice * (detailsModalProduct.gstRate ?? 18)) /
-                            100
-                  )}
-                </span>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60">
-                <span className="text-[11px] font-semibold text-slate-400 block uppercase tracking-wider">
-                  Billing Unit
-                </span>
-                <span className="text-sm font-semibold text-slate-800 mt-0.5 block capitalize">
-                  {detailsModalProduct.billingUnit || 'One-time'}
-                </span>
-              </div>
-            </div>
-
-            {/* Inventory & Tracking Details */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-3 rounded-xl border border-slate-200 bg-white">
-                <span className="text-[11px] font-medium text-slate-400 block">Stock Level</span>
-                <span className="text-xs sm:text-sm font-bold text-slate-800 mt-0.5 block">
-                  {detailsModalProduct.stockQuantity ?? 100} {detailsModalProduct.unit || 'units'}
-                </span>
-              </div>
-              <div className="p-3 rounded-xl border border-slate-200 bg-white">
-                <span className="text-[11px] font-medium text-slate-400 block">Reorder Level</span>
-                <span className="text-xs sm:text-sm font-bold text-slate-800 mt-0.5 block">
-                  {detailsModalProduct.reorderLevel ?? 20} {detailsModalProduct.unit || 'units'}
-                </span>
-              </div>
-              <div className="p-3 rounded-xl border border-slate-200 bg-white">
-                <span className="text-[11px] font-medium text-slate-400 block">
-                  Serialized Tracking
-                </span>
-                <span className="text-xs sm:text-sm font-bold text-emerald-600 mt-0.5 block">
-                  {detailsModalProduct.isSerialized ? 'Serialized Unit' : 'Standard Lot'}
-                </span>
-              </div>
-            </div>
-
-            {/* Description or Deliverables */}
-            {(detailsModalProduct.deliverables || detailsModalProduct.description) && (
-              <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Deliverables & Scope
-                </span>
-                <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  {detailsModalProduct.deliverables || detailsModalProduct.description}
-                </p>
-              </div>
-            )}
-
             {/* Modal Actions */}
-            <div className="pt-2 flex items-center justify-between border-t border-slate-100">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
+                type="button"
+                onClick={() => setDetailsModalProduct(null)}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   const id = detailsModalProduct.id;
                   setDetailsModalProduct(null);
                   navigate(`/owner/products/new?id=${id}`);
                 }}
-                className="flex items-center gap-1.5 px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
               >
-                <Edit className="w-3.5 h-3.5 text-blue-600" />
-                <span>Edit Full Product</span>
-              </button>
-
-              <button
-                onClick={() => setDetailsModalProduct(null)}
-                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl transition cursor-pointer"
-              >
-                Close
+                <Edit className="w-3.5 h-3.5" />
+                <span>Edit Product</span>
               </button>
             </div>
           </div>
@@ -701,7 +703,7 @@ export const OwnerProducts: React.FC = () => {
                     onClick={handleAutoGenerateQr}
                     className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition cursor-pointer"
                   >
-                    <Sparkles className="w-3 h-3" />
+                    <Sparkles className="w-3.5 h-3.5" />
                     <span>Auto-Generate</span>
                   </button>
 
@@ -722,12 +724,12 @@ export const OwnerProducts: React.FC = () => {
                   >
                     {isCameraScanning ? (
                       <>
-                        <CameraOff className="w-3 h-3" />
+                        <CameraOff className="w-3.5 h-3.5" />
                         <span>Stop Camera</span>
                       </>
                     ) : (
                       <>
-                        <Camera className="w-3 h-3" />
+                        <Camera className="w-3.5 h-3.5" />
                         <span>Scan Camera</span>
                       </>
                     )}

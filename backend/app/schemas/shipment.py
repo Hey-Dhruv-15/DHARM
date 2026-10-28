@@ -520,3 +520,48 @@ class ShipmentOut(ShipmentBase):
     created_at: Optional[datetime] = Field(default=None, alias="createdAt")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class OutboundDeliveryCreate(BaseModel):
+    """
+    Payload for 'Dispatch Outbound Customer Delivery' modal form:
+    'Bundle verified hub inventory into customer delivery manifest.'
+    """
+    customer_consignee: Optional[str] = Field(default="Anusha S (BioMed Diagnostics)", alias="customerConsignee", description="Customer consignee name or organization")
+    facility_address: Optional[str] = Field(default="BioMed Research Campus Bay 2 (Tech Park)", alias="facilityAddress", description="Customer destination facility address")
+    courier_vehicle: Optional[str] = Field(default="Midwest Van Express #402", alias="courierVehicle", description="Courier vehicle / Driver unit")
+    delivery_notes: Optional[str] = Field(default="Final mile expedited courier delivery.", alias="deliveryNotes", description="Delivery notes and clinical instructions")
+
+    # Alternate aliases from standard shipment payloads
+    customer_name: Optional[str] = Field(default=None, alias="customerName")
+    destination: Optional[str] = None
+    carrier_vehicle: Optional[str] = Field(default=None, alias="carrierVehicle")
+    notes: Optional[str] = None
+
+    # Operational logistics metadata with enterprise defaults
+    origin: Optional[str] = Field(default="Midwest Sorting Hub 4 (Cross-Dock)", description="Outbound dispatch hub")
+    vendor_name: Optional[str] = Field(default="Trans-Express Regional Logistics", alias="vendorName")
+    vendor_id: Optional[str] = Field(default="usr-vendor-02", alias="vendorId")
+    customer_id: Optional[str] = Field(default="usr-cust-03", alias="customerId")
+    owner_name: Optional[str] = Field(default="Dhruva (Owner)", alias="ownerName")
+    owner_id: Optional[str] = Field(default="usr-owner-01", alias="ownerId")
+    status: Optional[str] = Field(default="In Transit", description="Initial status for outbound delivery (In Transit / Dispatched)")
+    tracking_number: Optional[str] = Field(default=None, alias="trackingNumber")
+    container_ids: List[str] = Field(default=[], alias="containerIds")
+    items: List[ShipmentItemBase] = Field(default=[])
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class OutboundDeliveryResponse(BaseModel):
+    status: str = "success"
+    message: str = "Outbound customer delivery manifest generated and dispatched."
+    tracking_number: str = Field(..., alias="trackingNumber")
+    manifest_hash: str = Field(..., alias="manifestHash")
+    courier_vehicle: str = Field(..., alias="courierVehicle")
+    customer_consignee: str = Field(..., alias="customerConsignee")
+    facility_address: str = Field(..., alias="facilityAddress")
+    shipment_status: str = Field(..., alias="shipmentStatus")
+    shipment: ShipmentOut
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)

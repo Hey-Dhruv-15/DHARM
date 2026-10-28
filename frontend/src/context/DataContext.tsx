@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect } from 'react';
 import type {
   Product,
   Container,
   ContainerType,
   Shipment,
   DiscrepancyCase,
+  DiscrepancyType,
   ReturnCase,
   CustomerResolutionChoice,
   AuditEvent,
@@ -23,6 +24,8 @@ import {
   CustomerBackendService,
   type DiscrepancySubmissionInput
 } from '../services/customerApi';
+import { productApi } from '../services/productApi';
+import { orderApi } from '../services/orderApi';
 import {
   INITIAL_PRODUCTS,
   INITIAL_CONTAINERS,
@@ -93,6 +96,7 @@ interface DataContextType {
   resetDemoData: () => void;
 
   // Customer Portal Actions
+  refreshOrders: () => Promise<void>;
   placeCustomerOrder: (
     orderData: {
       items: Array<{
@@ -294,6 +298,182 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('dharm_scans', JSON.stringify(scanRecords));
   }, [scanRecords]);
 
+  // Sync initial returns & discrepancies from backend
+  useEffect(() => {
+    // Sync master products from backend REST API (GET /api/products)
+    // Sync master orders from backend REST API (GET /api/orders)
+    orderApi.listOrders()
+      .then(apiOrders => {
+        if (Array.isArray(apiOrders) && apiOrders.length > 0) {
+          setOrders(prev => {
+            const apiIds = new Set(apiOrders.map(o => o.id));
+            const remain = prev.filter(o => !apiIds.has(o.id));
+            return [...apiOrders, ...remain];
+          });
+        }
+      })
+      .catch(err => console.debug('Notice fetching orders from API:', err));
+
+    productApi.listProducts()
+      .then(apiProducts => {
+        if (Array.isArray(apiProducts) && apiProducts.length > 0) {
+          setProducts(prev => {
+            const apiIds = new Set(apiProducts.map(p => p.id));
+            const remain = prev.filter(p => !apiIds.has(p.id));
+            return [...apiProducts, ...remain];
+          });
+        }
+      })
+      .catch(err => console.debug('Notice fetching products from API:', err));
+
+    fetch('http://localhost:8000/api/returns')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setReturns(prev => {
+            const ids = new Set(prev.map(r => r.id));
+            const newItems: ReturnCase[] = data
+              .filter((d: any) => !ids.has(d.id))
+              .map((d: any) => ({
+                id: d.id,
+                returnNumber: d.returnNumber || d.return_number,
+                originalShipmentId: d.originalShipmentId || d.original_shipment_id || '',
+                trackingNumber: d.trackingNumber || d.tracking_number || '',
+                orderId: d.orderId || d.order_id,
+                orderNumber: d.orderNumber || d.order_number,
+                customerId: d.customerId || d.customer_id || 'usr-cust-03',
+                customerName: d.customerName || d.customer_name || 'Customer',
+                productId: d.productId || d.product_id || '',
+                productName: d.productName || d.product_name || 'Product',
+                sku: d.sku,
+                quantity: d.quantity || 1,
+                reason: d.reason || 'Damaged in Transit',
+                status: d.status || 'Received at Hub',
+                evidencePhotos: d.evidencePhotos || d.evidence_photos || [],
+                inspectionNotes: d.inspectionNotes || d.inspection_notes,
+                quarantineLocation: d.quarantineLocation || d.quarantine_location || 'Vendor Hub Quarantine Bay Q-4B',
+                customerChoice: d.customerChoice || d.customer_choice || 'Replace Product',
+                vendorVerified: d.vendorVerified ?? d.vendor_verified,
+                vendorVerifiedBy: d.vendorVerifiedBy || d.vendor_verified_by,
+                vendorVerifiedAt: d.vendorVerifiedAt || d.vendor_verified_at,
+                problemDiagnosis: d.problemDiagnosis || d.problem_diagnosis,
+                refundAmount: d.refundAmount ?? d.refund_amount,
+                refundStatus: d.refundStatus || d.refund_status,
+                replacementShipmentId: d.replacementShipmentId || d.replacement_shipment_id,
+                requestedAt: d.requestedAt || d.requested_at,
+                updatedAt: d.updatedAt || d.updated_at
+              }));
+            return [...newItems, ...prev];
+          });
+        }
+      })
+      .catch(err => console.debug('Notice fetching returns from API:', err));
+
+    // Sync live shipments from backend REST API (GET /api/shipments)
+    fetch('http://localhost:8000/api/shipments')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setShipments(prev => {
+            const trks = new Set(prev.map(s => s.trackingNumber));
+            const newItems: Shipment[] = data
+              .filter((d: any) => !trks.has(d.trackingNumber || d.tracking_number))
+              .map((d: any) => ({
+                id: d.id,
+                trackingNumber: d.trackingNumber || d.tracking_number,
+                ownerId: d.ownerId || d.owner_id || 'usr-owner-01',
+                ownerName: d.ownerName || d.owner_name || 'Dhruva (Owner)',
+                vendorId: d.vendorId || d.vendor_id || 'usr-vendor-02',
+                vendorName: d.vendorName || d.vendor_name || 'Trans-Express',
+                customerId: d.customerId || d.customer_id || 'usr-cust-03',
+                customerName: d.customerName || d.customer_name || 'Customer',
+                origin: d.origin || 'Central Logistics Hub',
+                destination: d.destination || 'Customer Facility',
+                status: d.status || 'In Transit',
+                items: (d.items || []).map((i: any) => ({
+                  productId: i.productId || i.product_id,
+                  productName: i.productName || i.product_name,
+                  sku: i.sku,
+                  barcode: i.barcode,
+                  containerId: i.containerId || i.container_id,
+                  containerNumber: i.containerNumber || i.container_number,
+                  expectedQuantity: i.expectedQuantity ?? i.expected_quantity ?? 1,
+                  verifiedQuantity: i.verifiedQuantity ?? i.verified_quantity ?? 0,
+                  scannedQuantity: i.scannedQuantity ?? i.scanned_quantity ?? 0,
+                  status: i.status || 'Pending'
+                })),
+                containerIds: d.containerIds || d.container_ids || [],
+                manifestHash: d.manifestHash || d.manifest_hash || '0x',
+                dispatchDate: d.dispatchDate || d.dispatch_date,
+                estimatedDelivery: d.estimatedDelivery || d.estimated_delivery,
+                actualDelivery: d.actualDelivery || d.actual_delivery,
+                notes: d.notes,
+                events: (d.events || []).map((e: any) => ({
+                  id: e.id,
+                  timestamp: e.timestamp,
+                  status: e.status,
+                  location: e.location,
+                  performedBy: e.performedBy || e.performed_by,
+                  notes: e.notes
+                }))
+              }));
+            return [...newItems, ...prev];
+          });
+        }
+      })
+      .catch(err => console.debug('Notice fetching shipments from API:', err));
+
+    fetch('http://localhost:8000/api/discrepancies')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setDiscrepancies(prev => {
+            const ids = new Set(prev.map(d => d.id));
+            const newItems: DiscrepancyCase[] = data
+              .filter((d: any) => !ids.has(d.id))
+              .map((d: any) => ({
+                id: d.id,
+                discrepancyNumber: d.discrepancyNumber || d.discrepancy_number,
+                shipmentId: d.shipmentId || d.shipment_id || '',
+                shipmentTracking: d.shipmentTracking || d.shipment_tracking || '',
+                orderId: d.orderId || d.order_id,
+                orderNumber: d.orderNumber || d.order_number,
+                customerId: d.customerId || d.customer_id,
+                customerName: d.customerName || d.customer_name,
+                containerId: d.containerId || d.container_id,
+                containerNumber: d.containerNumber || d.container_number,
+                productId: d.productId || d.product_id,
+                productName: d.productName || d.product_name,
+                sku: d.sku,
+                type: d.type || 'Damaged Goods',
+                severity: d.severity || 'Medium',
+                status: d.status || 'Detected',
+                expectedQuantity: d.expectedQuantity ?? d.expected_quantity ?? 1,
+                observedQuantity: d.observedQuantity ?? d.observed_quantity ?? 0,
+                detectionStage: d.detectionStage || d.detection_stage || 'Customer Handover',
+                detectedBy: d.detectedBy || d.detected_by || 'Customer',
+                assignedInvestigator: d.assignedInvestigator || d.assigned_investigator,
+                evidence: (d.evidence || []).map((e: any) => ({
+                  id: e.id,
+                  type: e.type,
+                  url: e.url,
+                  description: e.description,
+                  uploadedBy: e.uploadedBy || e.uploaded_by,
+                  timestamp: e.timestamp
+                })),
+                preferredResolution: d.preferredResolution || d.preferred_resolution,
+                resolutionNotes: d.resolutionNotes || d.resolution_notes,
+                resolutionOutcome: d.resolutionOutcome || d.resolution_outcome || 'Pending',
+                detectedAt: d.detectedAt || d.detected_at,
+                updatedAt: d.updatedAt || d.updated_at
+              }));
+            return [...newItems, ...prev];
+          });
+        }
+      })
+      .catch(err => console.debug('Notice fetching discrepancies from API:', err));
+  }, []);
+
   const logAudit = (
     actorName: string,
     actorRole: UserRole,
@@ -327,6 +507,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setProducts(prev => [newProd, ...prev]);
     logAudit(actorName, role, 'PRODUCT_REGISTERED', 'Product', newProd.id, `Registered SKU: ${newProd.sku} (${newProd.name}) with stock: ${newProd.stockQuantity}`);
+
+    // Call backend REST API (POST /api/products)
+    productApi.createProduct(newProd)
+      .then(saved => {
+        if (saved && saved.id) {
+          setProducts(prev => prev.map(p => p.id === newProd.id ? saved : p));
+        }
+      })
+      .catch(err => console.warn('Notice syncing product to backend POST /api/products:', err));
+
     return newProd;
   };
 
@@ -340,6 +530,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map(p => (p.id === id ? { ...p, ...updates } : p))
     );
     logAudit(actorName, role, 'PRODUCT_REGISTERED', 'Product', id, `Updated product catalog details for SKU: ${updates.sku || id}`);
+
+    // Call backend REST API (PUT /api/products/{id})
+    productApi.updateProduct(id, updates).catch(err => console.warn('Notice syncing product update to backend PUT /api/products:', err));
   };
 
   const deleteProduct = (
@@ -349,6 +542,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ) => {
     setProducts(prev => prev.filter(p => p.id !== id));
     logAudit(actorName, role, 'PRODUCT_REGISTERED', 'Product', id, `Archived/Removed product catalog ID: ${id}`);
+
+    // Call backend REST API (DELETE /api/products/{id})
+    productApi.deleteProduct(id).catch(err => console.warn('Notice syncing product deletion to backend DELETE /api/products:', err));
   };
 
   const createContainer = (
@@ -810,6 +1006,58 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     logAudit(actorName, role, 'DISCREPANCY_LOGGED', 'Discrepancy', newCase.id, `Reported discrepancy ${num} (${data.type}) on shipment ${data.shipmentTracking}`);
+
+    // Sync with FastAPI backend POST /api/discrepancies/report
+    try {
+      fetch('http://localhost:8000/api/discrepancies/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shipmentId: data.shipmentId,
+          shipmentTracking: data.shipmentTracking,
+          productId: data.productId,
+          productName: data.productName,
+          sku: data.sku,
+          discrepancyType: data.type,
+          severity: data.severity,
+          expectedUnits: data.expectedQuantity,
+          observedPhysicalUnits: data.observedQuantity,
+          inspectionEvidenceNotes: data.resolutionNotes || (data.evidence?.[0]?.description),
+          notes: data.resolutionNotes,
+          containerId: data.containerId,
+          containerNumber: data.containerNumber,
+          detectionStage: data.detectionStage,
+          detectedBy: actorName || data.detectedBy,
+          evidencePhotos: data.evidence?.map(e => e.url).filter(Boolean) || []
+        })
+      })
+        .then(async res => {
+          if (res.ok) {
+            const body = await res.json();
+            if (body.discrepancy) {
+              setDiscrepancies(prev =>
+                prev.map(d =>
+                  d.id === newCase.id
+                    ? {
+                        ...d,
+                        id: body.discrepancy.id,
+                        discrepancyNumber:
+                          body.discrepancy.discrepancyNumber ||
+                          body.discrepancy.discrepancy_number ||
+                          d.discrepancyNumber
+                      }
+                    : d
+                )
+              );
+            }
+          }
+        })
+        .catch(err => {
+          console.warn('Backend discrepancy report sync notice:', err);
+        });
+    } catch (e) {
+      console.warn('Backend discrepancy report error:', e);
+    }
     return newCase;
   };
 
@@ -836,6 +1084,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
     logAudit(actorName, role, 'DISCREPANCY_STATUS_CHANGED', 'Discrepancy', id, `Updated discrepancy to status: ${status}. Outcome: ${outcome || 'In Progress'}`);
+
+    try {
+      fetch(`http://localhost:8000/api/discrepancies/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status,
+          resolutionNotes: notes,
+          resolutionOutcome: outcome
+        })
+      }).catch(err => console.warn('Update discrepancy notice:', err));
+    } catch (e) {}
   };
 
   const confirmCustomerDelivery = (shipmentId: string, actorName: string, notes: string) => {
@@ -870,18 +1130,151 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     data: Omit<ReturnCase, 'id' | 'returnNumber' | 'status' | 'requestedAt' | 'updatedAt'>,
     actorName: string
   ): ReturnCase => {
-    const num = `RET-2026-${Math.floor(100 + Math.random() * 900)}`;
+    const randSuffix = Math.floor(100 + Math.random() * 900);
+    const num = `RET-2026-${randSuffix}`;
+    const discNum = `DSC-2026-${randSuffix}`;
     const now = new Date().toISOString();
+    const retId = `ret-${Date.now()}`;
+    const discId = `dsc-${Date.now()}`;
+
+    // 1. Owner Returns & Replacements + Vendor Customer Damaged
     const newRet: ReturnCase = {
       ...data,
-      id: `ret-${Date.now()}`,
+      id: retId,
       returnNumber: num,
-      status: 'Requested',
+      status: 'Received at Hub',
+      quarantineLocation: data.quarantineLocation || 'Vendor Hub Quarantine Bay Q-4B',
+      customerChoice: data.customerChoice || 'Replace Product',
+      vendorVerified: false,
+      problemDiagnosis: data.inspectionNotes
+        ? `Reported: ${data.reason}. Details: ${data.inspectionNotes}`
+        : `Reported: ${data.reason}`,
+      refundAmount: data.refundAmount,
+      refundStatus: data.customerChoice === 'Refund Amount' ? 'Pending' : undefined,
       requestedAt: now,
       updatedAt: now
     };
     setReturns(prev => [newRet, ...prev]);
-    logAudit(actorName, 'CUSTOMER', 'RETURN_REQUESTED', 'Return', newRet.id, `Return requested for ${data.productName} (Qty: ${data.quantity}) due to ${data.reason}`);
+
+    // 2. Vendor Exceptions and Damage (Dock & Handover Discrepancies)
+    let discType: DiscrepancyType = 'Damaged Goods';
+    if (data.reason.includes('Incorrect')) discType = 'Missing Item';
+    else if (data.reason.includes('Quantity')) discType = 'Quantity Mismatch';
+
+    const newDisc: DiscrepancyCase = {
+      id: discId,
+      discrepancyNumber: discNum,
+      shipmentId: data.originalShipmentId,
+      shipmentTracking: data.trackingNumber,
+      orderId: data.orderId,
+      orderNumber: data.orderNumber,
+      customerId: data.customerId,
+      customerName: data.customerName,
+      productId: data.productId,
+      productName: data.productName,
+      sku: data.sku,
+      type: discType,
+      severity: 'Critical',
+      status: 'Detected',
+      expectedQuantity: data.quantity,
+      observedQuantity: 0,
+      detectionStage: 'Customer Handover',
+      detectedBy: actorName || data.customerName,
+      assignedInvestigator: 'Vendor QA Desk (Sinu Gunshetty)',
+      preferredResolution: data.customerChoice === 'Refund Amount' ? 'Refund' : 'Replacement',
+      resolutionNotes: `${data.reason}: ${data.inspectionNotes || 'Customer filed damage claim'}`,
+      resolutionOutcome: 'Pending',
+      evidence:
+        data.evidencePhotos?.map((url, i) => ({
+          id: `ev-${Date.now()}-${i}`,
+          type: 'Photo',
+          url,
+          description: `Customer submitted evidence for ${data.productName}`,
+          uploadedBy: actorName || data.customerName,
+          timestamp: now
+        })) || [],
+      detectedAt: now,
+      updatedAt: now
+    };
+    setDiscrepancies(prev => [newDisc, ...prev]);
+
+    logAudit(
+      actorName,
+      'CUSTOMER',
+      'RETURN_REQUESTED',
+      'Return',
+      newRet.id,
+      `Customer filed damage claim ${num} for ${data.productName} (Qty: ${data.quantity}) - Choice: ${data.customerChoice}. Synced to Owner Returns & Vendor Exceptions.`
+    );
+
+    // 3. Sync seamlessly with FastAPI backend POST /api/returns/claim
+    try {
+      fetch('http://localhost:8000/api/returns/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shipmentId: data.originalShipmentId,
+          trackingNumber: data.trackingNumber,
+          orderId: data.orderId,
+          orderNumber: data.orderNumber,
+          customerId: data.customerId,
+          customerName: data.customerName,
+          productId: data.productId,
+          productName: data.productName,
+          sku: data.sku,
+          quantity: data.quantity,
+          reason: data.reason,
+          customerChoice: data.customerChoice || 'Replace Product',
+          evidencePhotos: data.evidencePhotos || [],
+          notes: data.inspectionNotes,
+          description: data.inspectionNotes,
+          refundAmount: data.refundAmount
+        })
+      })
+        .then(async res => {
+          if (res.ok) {
+            const body = await res.json();
+            if (body.returnCase) {
+              setReturns(prev =>
+                prev.map(r =>
+                  r.id === retId
+                    ? {
+                        ...r,
+                        id: body.returnCase.id,
+                        returnNumber:
+                          body.returnCase.returnNumber ||
+                          body.returnCase.return_number ||
+                          r.returnNumber
+                      }
+                    : r
+                )
+              );
+            }
+            if (body.discrepancyCase) {
+              setDiscrepancies(prev =>
+                prev.map(d =>
+                  d.id === discId
+                    ? {
+                        ...d,
+                        id: body.discrepancyCase.id,
+                        discrepancyNumber:
+                          body.discrepancyCase.discrepancyNumber ||
+                          body.discrepancyCase.discrepancy_number ||
+                          d.discrepancyNumber
+                      }
+                    : d
+                )
+              );
+            }
+          }
+        })
+        .catch(err => {
+          console.warn('Backend return claim sync notice:', err);
+        });
+    } catch (e) {
+      console.warn('Backend return claim dispatch error:', e);
+    }
+
     return newRet;
   };
 
@@ -907,6 +1300,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
     logAudit(actorName, 'VENDOR', 'RETURN_STATUS_UPDATED', 'Return', id, `Return status changed to ${status}. Quarantine: ${quarantineLoc || 'N/A'}`);
+  };
+
+  const refreshOrders = async () => {
+    try {
+      const apiOrders = await orderApi.listOrders();
+      if (Array.isArray(apiOrders) && apiOrders.length > 0) {
+        setOrders(prev => {
+          const apiIds = new Set(apiOrders.map(o => o.id));
+          const remain = prev.filter(o => !apiIds.has(o.id));
+          return [...apiOrders, ...remain];
+        });
+      }
+    } catch (err) {
+      console.debug('Notice refreshing orders from API:', err);
+    }
   };
 
   // Customer Portal Methods
@@ -1226,6 +1634,57 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setDiscrepancies(prev => [newCase, ...prev]);
 
+    // Also instantiate return claim for Vendor Exceptions & Damaged module
+    const retNum = `RET-2026-${Math.floor(100 + Math.random() * 900)}`;
+    const newReturn: ReturnCase = {
+      id: `ret-${Date.now()}`,
+      returnNumber: retNum,
+      originalShipmentId: newCase.shipmentId || 'shp-2026-001',
+      trackingNumber: newCase.shipmentTracking || `TRK-DHM-${Math.floor(100000 + Math.random() * 900000)}`,
+      orderId: newCase.orderId,
+      orderNumber: newCase.orderNumber,
+      customerId,
+      customerName,
+      productId: newCase.productId || 'prod-001',
+      productName: newCase.productName || 'OptiTrace Diagnostic Sensor Array',
+      sku: newCase.sku || 'BIO-DIAG-440',
+      quantity: input.observedQuantity || 1,
+      reason: input.category === 'Damaged Goods' ? 'Damaged in Transit' : 'Defective Unit',
+      status: 'Received at Hub',
+      evidencePhotos: (input.evidenceFiles || []).map(f => f.dataUrl || '/dharm_logistics_hero.jpg'),
+      quarantineLocation: 'Vendor Hub Quarantine Bay Q-4B',
+      customerChoice: input.preferredResolution === 'Refund' ? 'Refund Amount' : 'Replace Product',
+      vendorVerified: false,
+      problemDiagnosis: input.description || 'Customer reported defective/damaged unit upon delivery.',
+      refundStatus: 'Pending Inspection',
+      requestedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setReturns(prev => [newReturn, ...prev]);
+
+    // Sync with FastAPI backend Exceptions & Damaged intake
+    try {
+      fetch(`http://localhost:8000/api/orders/${input.orderId || 'ord'}/report-problem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: input.productId,
+          productName: newCase.productName,
+          sku: newCase.sku,
+          problemCategory: input.category,
+          preferredResolution: input.preferredResolution || 'Replacement',
+          deliveredUnits: input.expectedQuantity || 1,
+          defectiveUnits: input.observedQuantity || 1,
+          description: input.description,
+          evidencePhotos: newReturn.evidencePhotos
+        })
+      }).catch(err => {
+        console.warn('Backend problem report sync notice:', err);
+      });
+    } catch (e) {
+      // Non-blocking fallback
+    }
+
     // Update shipment status if applicable
     if (newCase.shipmentId) {
       setShipments(prev =>
@@ -1338,6 +1797,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
     logAudit(actorName, 'VENDOR', 'RETURN_INSPECTED', 'Return', id, `Vendor verified defect for return ${id}: ${diagnosis}. Quarantined at ${quarantineLoc}`);
+
+    try {
+      fetch(`http://localhost:8000/api/returns/${id}/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          diagnosis,
+          notes,
+          quarantineLocation: quarantineLoc,
+          verifiedBy: actorName
+        })
+      }).catch(err => console.warn('Verify return notice:', err));
+    } catch (e) {}
   };
 
   const processReturnResolution = (
@@ -1376,6 +1848,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
     logAudit(actorName, 'VENDOR', 'RETURN_RESOLVED', 'Return', id, `Processed customer resolution choice (${resolution}) for return ${id}`);
+
+    try {
+      fetch(`http://localhost:8000/api/returns/${id}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resolution,
+          replacementShipmentTracking: details?.replacementShipmentTracking || (resolution === 'Replace Product' ? `TRK-REP-${Math.floor(10000 + Math.random() * 90000)}` : undefined),
+          refundReference: details?.refundReference,
+          refundAmount: details?.refundAmount,
+          resolvedBy: actorName
+        })
+      }).catch(err => console.warn('Resolve return notice:', err));
+    } catch (e) {}
   };
 
   const resetDemoData = () => {
@@ -1419,6 +1905,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         orders,
         customerProfile,
         notifications,
+        refreshOrders,
         placeCustomerOrder,
         updateOrderStatus,
         cancelCustomerOrder,

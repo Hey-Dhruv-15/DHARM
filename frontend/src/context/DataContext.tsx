@@ -1226,6 +1226,57 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setDiscrepancies(prev => [newCase, ...prev]);
 
+    // Also instantiate return claim for Vendor Exceptions & Damaged module
+    const retNum = `RET-2026-${Math.floor(100 + Math.random() * 900)}`;
+    const newReturn: ReturnCase = {
+      id: `ret-${Date.now()}`,
+      returnNumber: retNum,
+      originalShipmentId: newCase.shipmentId || 'shp-2026-001',
+      trackingNumber: newCase.shipmentTracking || `TRK-DHM-${Math.floor(100000 + Math.random() * 900000)}`,
+      orderId: newCase.orderId,
+      orderNumber: newCase.orderNumber,
+      customerId,
+      customerName,
+      productId: newCase.productId || 'prod-001',
+      productName: newCase.productName || 'OptiTrace Diagnostic Sensor Array',
+      sku: newCase.sku || 'BIO-DIAG-440',
+      quantity: input.observedQuantity || 1,
+      reason: input.category === 'Damaged Goods' ? 'Damaged in Transit' : 'Defective Unit',
+      status: 'Received at Hub',
+      evidencePhotos: (input.evidenceFiles || []).map(f => f.dataUrl || '/dharm_logistics_hero.jpg'),
+      quarantineLocation: 'Vendor Hub Quarantine Bay Q-4B',
+      customerChoice: input.preferredResolution === 'Refund' ? 'Refund Amount' : 'Replace Product',
+      vendorVerified: false,
+      problemDiagnosis: input.description || 'Customer reported defective/damaged unit upon delivery.',
+      refundStatus: 'Pending Inspection',
+      requestedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setReturns(prev => [newReturn, ...prev]);
+
+    // Sync with FastAPI backend Exceptions & Damaged intake
+    try {
+      fetch(`http://localhost:8000/api/orders/${input.orderId || 'ord'}/report-problem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: input.productId,
+          productName: newCase.productName,
+          sku: newCase.sku,
+          problemCategory: input.category,
+          preferredResolution: input.preferredResolution || 'Replacement',
+          deliveredUnits: input.expectedQuantity || 1,
+          defectiveUnits: input.observedQuantity || 1,
+          description: input.description,
+          evidencePhotos: newReturn.evidencePhotos
+        })
+      }).catch(err => {
+        console.warn('Backend problem report sync notice:', err);
+      });
+    } catch (e) {
+      // Non-blocking fallback
+    }
+
     // Update shipment status if applicable
     if (newCase.shipmentId) {
       setShipments(prev =>

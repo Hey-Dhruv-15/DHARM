@@ -8,9 +8,12 @@ from app.database import get_db
 from app.models.user import User
 from app.models.order import Order, OrderItem, OrderHistory
 from app.models.audit import AuditEvent
+from app.models.discrepancy import DiscrepancyCase
+from app.models.return_case import ReturnCase
 from app.schemas.order import (
     OrderCreate, OrderOut, OrderStatusUpdate, OrderCancelRequest,
-    OrderDeliveryRequest, OrderDeliverResponse, OrderHistoryOut
+    OrderDeliveryRequest, OrderDeliverResponse, OrderHistoryOut,
+    OrderProblemReportRequest, VendorExceptionResponse
 )
 from app.core.security import get_current_user_optional
 
@@ -498,3 +501,144 @@ def cancel_order(
     db.commit()
     db.refresh(order)
     return order
+
+
+@router.post("/{id}/report-problem", response_model=VendorExceptionResponse, status_code=status.HTTP_201_CREATED)
+def report_order_problem(
+    id: str,
+    report: OrderProblemReportRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
+    """
+    Action API: 'Report a Problem' from Order / Order History modal.
+    Creates an official Discrepancy Case and Return Case routed directly to the
+    Vendor Hub's 'Exceptions & Damaged' module for physical quarantine inspection and resolution.
+    """
+    # 1. Locate the order (checks both active orders and order history)
+    order = db.query(Order).filter((Order.id == id) | (Order.order_number == id)).first()
+    order_hist = None
+    if not order:
+        order_hist = db.query(OrderHistory).filter(
+            (OrderHistory.id == id) | 
+            (OrderHistory.original_order_id == id) | 
+            (OrderHistory.order_number == id)
+        ).first()
+
+    order_id = order.id if order else (order_hist.original_order_id if order_hist else id)
+    order_number = order.order_number if order else (order_hist.order_number if order_hist else id)
+    customer_id = (order.customer_id if order else (order_hist.customer_id if order_hist else None)) or (current_user.id if current_user else "usr-cust-03")
+    customer_name = (order.customer_name if order else (order_hist.customer_name if order_hist else None)) or (current_user.name if current_user else "Anusha S (BioMed)")
+    customer_po = (order.customer_po_reference if order else (order_hist.customer_po_reference if order_hist else None)) or "PO-BIO-2026-0102"
+    tracking = (order.tracking_number if order else (order_hist.tracking_number if order_hist else None)) or f"TRK-{order_number}"
+    shipment_id = (order.shipment_id if order else None) or "shp-2026-001"
+
+    # 2. Match product info
+    matched_item = None
+    if order and order.items:
+        matched_item = next((it for it in order.items if it.product_id == report.product_id or it.sku == report.sku), order.items[0])
+
+    prod_name = report.product_name or (matched_item.product_name if matched_item else "OptiTrace Diagnostic Sensor Array")
+    prod_sku = report.sku or (matched_item.sku if matched_item else "BIO-DIAG-440")
+    prod_unit_price = matched_item.unit_price if matched_item else 14500.0
+
+    now = datetime.utcnow()
+    disc_num = f"DIS-2026-{random.randint(100, 999)}"
+    disc_id = f"disc-{int(now.timestamp() * 1000)}"
+    ret_num = f"RET-2026-{random.randint(100, 999)}"
+    ret_id = f"ret-{int(now.timestamp() * 1000)}"
+
+    # 3. Create DiscrepancyCase
+    severity = "Critical" if ("damaged" in report.problem_category.lower() or "crush" in report.problem_category.lower()) else "High"
+    discrepancy = DiscrepancyCase(
+        id=disc_id,
+        discrepancy_number=disc_num,
+        shipment_id=shipment_id,
+        shipment_tracking=tracking,
+        order_id=order_id,
+        order_number=order_number,
+        customer_id=customer_id,
+        customer_name=customer_name,
+        product_id=report.product_id,
+        product_name=prod_name,
+        sku=prod_sku,
+        type=report.problem_category,
+        severity=severity,
+        status="Under Review",
+        expected_quantity=report.delivered_units,
+        observed_quantity=max(0, report.delivered_units - report.defective_units),
+        detection_stage="Customer Handover",
+        detected_by=customer_name,
+        assigned_investigator="Vendor Hub QA & Exceptions Team",
+        preferred_resolution=report.preferred_resolution,
+        resolution_notes=f"Customer reported: {report.description}. Requested: {report.preferred_resolution}.",
+        resolution_outcome="Pending",
+        detected_at=now
+    )
+    db.add(discrepancy)
+
+    # 4. Create ReturnCase for Vendor Hub "Exceptions & Damaged" Module
+    customer_choice = "Replace Product" if "replace" in report.preferred_resolution.lower() else "Refund Amount"
+    refund_amt = round(prod_unit_price * report.defective_units * 1.18, 2)
+
+    return_case = ReturnCase(
+        id=ret_id,
+        return_number=ret_num,
+        original_shipment_id=shipment_id,
+        tracking_number=tracking,
+        order_id=order_id,
+        order_number=order_number,
+        customer_id=customer_id,
+        customer_name=customer_name,
+        product_id=report.product_id,
+        product_name=prod_name,
+        sku=prod_sku,
+        quantity=report.defective_units,
+        reason=report.problem_category,
+        status="Received at Hub",
+        quarantine_location="Vendor Hub Quarantine Bay Q-4B",
+        customer_choice=customer_choice,
+        vendor_verified=False,
+        problem_diagnosis=f"Customer claim: '{report.description}'. Physical bench check required before releasing replacement or credit note.",
+        refund_amount=refund_amt,
+        refund_status="Pending Inspection",
+        evidence_photos=report.evidence_photos or ["/dharm_logistics_hero.jpg"],
+        requested_at=now
+    )
+    db.add(return_case)
+
+    # 5. Log Custody Audit Event
+    audit_entry = AuditEvent(
+        id=f"aud-{int(now.timestamp() * 1000)}",
+        timestamp=now,
+        actor_name=customer_name,
+        actor_role="CUSTOMER",
+        action="CUSTOMER_PROBLEM_REPORTED",
+        entity_type="Discrepancy",
+        entity_id=disc_id,
+        details=f"Problem report filed for Order #{order_number}: {report.defective_units}x {prod_name} flagged as '{report.problem_category}'. Routed to Vendor Exceptions & Damaged module."
+    )
+    db.add(audit_entry)
+
+    db.commit()
+
+    return VendorExceptionResponse(
+        success=True,
+        message=f"Problem report for Order #{order_number} received. Exception case #{disc_num} and Return claim #{ret_num} routed directly to Vendor Exceptions & Damaged module.",
+        order_id=order_id,
+        order_number=order_number,
+        customer_po_reference=customer_po,
+        discrepancy_id=disc_id,
+        discrepancy_number=disc_num,
+        return_id=ret_id,
+        return_number=ret_num,
+        vendor_module="Exceptions & Damaged",
+        target_quarantine_bay="Vendor Hub Quarantine Bay Q-4B",
+        product_name=prod_name,
+        sku=prod_sku,
+        defective_units=report.defective_units,
+        problem_category=report.problem_category,
+        customer_resolution_preference=customer_choice,
+        vendor_verification_pending=True,
+        created_at=now
+    )

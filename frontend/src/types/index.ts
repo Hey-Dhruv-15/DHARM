@@ -63,17 +63,48 @@ export interface Product {
   createdAt: string;
 }
 
+export type ContainerType =
+  | 'Cold-Chain Bin'
+  | 'Security Crate'
+  | 'RFID Pallet'
+  | 'Heavy Duty Tote'
+  | 'Standard Container'
+  | 'Standard Parcel';
+
+export interface ContainerScannedItem {
+  id?: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  barcode: string;
+  quantity: number;
+  weightKg: number;
+  unitWeightKg: number;
+  scannedAt: string;
+}
+
 export interface Container {
   id: string;
   containerNumber: string;
-  type: 'Cold-Chain Bin' | 'Security Crate' | 'RFID Pallet' | 'Standard Parcel' | 'Heavy Duty Tote';
-  sealNumber: string;
-  status: 'Empty' | 'Assigned' | 'Sealed' | 'In Transit' | 'Unsealed';
+  type: ContainerType;
+  maxCapacity?: number;
+  capacityUnit?: 'kg' | 'lbs' | 'units';
   capacityKg: number;
   currentWeightKg: number;
-  itemCount: number;
-  assignedShipmentId?: string;
+  utilizedCapacity?: number;
+  sealNumber: string;
+  sealStatus?: 'Active' | 'Compromised' | 'Broken' | 'Verified';
+  initialLocation?: string;
   location: string;
+  description?: string;
+  status: 'Active' | 'Inactive' | 'Empty' | 'Assigned' | 'Sealed' | 'In Transit' | 'Unsealed';
+  assignedShipmentId?: string;
+  assignedShipmentTracking?: string;
+  itemCount: number;
+  items?: ContainerScannedItem[];
+  createdAt?: string;
+  createdBy?: string;
+  isActive?: boolean;
 }
 
 export interface ShipmentItem {

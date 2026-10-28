@@ -24,8 +24,12 @@ class DiscrepancyEvidenceOut(DiscrepancyEvidenceBase):
 
 class DiscrepancyBase(BaseModel):
     discrepancy_number: str = Field(..., alias="discrepancyNumber")
-    shipment_id: str = Field(..., alias="shipmentId")
-    shipment_tracking: str = Field(..., alias="shipmentTracking")
+    shipment_id: Optional[str] = Field(default=None, alias="shipmentId")
+    shipment_tracking: Optional[str] = Field(default=None, alias="shipmentTracking")
+    order_id: Optional[str] = Field(default=None, alias="orderId")
+    order_number: Optional[str] = Field(default=None, alias="orderNumber")
+    customer_id: Optional[str] = Field(default=None, alias="customerId")
+    customer_name: Optional[str] = Field(default=None, alias="customerName")
     container_id: Optional[str] = Field(default=None, alias="containerId")
     container_number: Optional[str] = Field(default=None, alias="containerNumber")
     product_id: Optional[str] = Field(default=None, alias="productId")
@@ -36,9 +40,10 @@ class DiscrepancyBase(BaseModel):
     status: str = "Detected"
     expected_quantity: int = Field(default=0, alias="expectedQuantity")
     observed_quantity: int = Field(default=0, alias="observedQuantity")
-    detection_stage: str = Field(..., alias="detectionStage")
-    detected_by: str = Field(..., alias="detectedBy")
+    detection_stage: str = Field(default="Customer Handover", alias="detectionStage")
+    detected_by: str = Field(default="Customer", alias="detectedBy")
     assigned_investigator: Optional[str] = Field(default=None, alias="assignedInvestigator")
+    preferred_resolution: Optional[str] = Field(default=None, alias="preferredResolution")
     resolution_notes: Optional[str] = Field(default=None, alias="resolutionNotes")
     resolution_outcome: Optional[str] = Field(default="Pending", alias="resolutionOutcome")
 
@@ -54,6 +59,7 @@ class DiscrepancyUpdate(BaseModel):
     status: Optional[str] = None
     severity: Optional[str] = None
     assigned_investigator: Optional[str] = Field(default=None, alias="assignedInvestigator")
+    preferred_resolution: Optional[str] = Field(default=None, alias="preferredResolution")
     resolution_notes: Optional[str] = Field(default=None, alias="resolutionNotes")
     resolution_outcome: Optional[str] = Field(default=None, alias="resolutionOutcome")
 

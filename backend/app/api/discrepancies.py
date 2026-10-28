@@ -16,17 +16,17 @@ router = APIRouter(prefix="/discrepancies", tags=["Discrepancy Engine"])
 
 @router.get("", response_model=List[DiscrepancyOut])
 def list_discrepancies(
-    status: Optional[str] = Query(None, description="Filter by status"),
-    severity: Optional[str] = Query(None, description="Filter by severity"),
-    shipment_id: Optional[str] = Query(None, description="Filter by shipment ID"),
+    status: Optional[str] = Query(default=None, description="Filter by status"),
+    severity: Optional[str] = Query(default=None, description="Filter by severity"),
+    shipment_id: Optional[str] = Query(default=None, description="Filter by shipment ID"),
     db: Session = Depends(get_db)
 ):
     query = db.query(DiscrepancyCase)
-    if status:
+    if isinstance(status, str):
         query = query.filter(DiscrepancyCase.status == status)
-    if severity:
+    if isinstance(severity, str):
         query = query.filter(DiscrepancyCase.severity == severity)
-    if shipment_id:
+    if isinstance(shipment_id, str):
         query = query.filter(DiscrepancyCase.shipment_id == shipment_id)
 
     return query.order_by(DiscrepancyCase.detected_at.desc()).all()
@@ -48,6 +48,10 @@ def create_discrepancy(disc_in: DiscrepancyCreate, db: Session = Depends(get_db)
         discrepancy_number=disc_in.discrepancy_number,
         shipment_id=disc_in.shipment_id,
         shipment_tracking=disc_in.shipment_tracking,
+        order_id=disc_in.order_id,
+        order_number=disc_in.order_number,
+        customer_id=disc_in.customer_id,
+        customer_name=disc_in.customer_name,
         container_id=disc_in.container_id,
         container_number=disc_in.container_number,
         product_id=disc_in.product_id,
@@ -61,6 +65,7 @@ def create_discrepancy(disc_in: DiscrepancyCreate, db: Session = Depends(get_db)
         detection_stage=disc_in.detection_stage,
         detected_by=disc_in.detected_by,
         assigned_investigator=disc_in.assigned_investigator,
+        preferred_resolution=disc_in.preferred_resolution,
         resolution_notes=disc_in.resolution_notes,
         resolution_outcome=disc_in.resolution_outcome or "Pending",
         detected_at=datetime.utcnow()

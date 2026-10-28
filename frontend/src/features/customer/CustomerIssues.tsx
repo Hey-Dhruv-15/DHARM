@@ -38,21 +38,28 @@ export const CustomerIssues: React.FC = () => {
     const ship = shipments.find(s => s.id === selectedShipmentId);
     const prod = products.find(p => p.id === selectedProductId);
 
+    const trackingNum = ship
+      ? ship.trackingNumber
+      : (selectedShipmentId.startsWith('TRK-') ? selectedShipmentId : 'TRK-DHM-884920');
+
     const created = createReturnRequest(
       {
         originalShipmentId: selectedShipmentId,
-        trackingNumber: ship ? ship.trackingNumber : 'TRK-UNKNOWN',
+        trackingNumber: trackingNum,
+        orderId: (ship as any)?.orderId || 'ord-001',
+        orderNumber: (ship as any)?.orderNumber || 'ORD-DHM-2026-9304',
         customerId: user?.id || 'usr-cust-03',
-        customerName: user?.name || 'Anusha S (BioMed)',
-        productId: prod?.id || 'prod-001',
-        productName: prod?.name || 'Cryo-Shield Specimen Transporter',
-        sku: prod?.sku || 'SKU-BIO-091',
+        customerName: user?.name || 'Anusha S (BioMed Advanced Research Diagnostics)',
+        productId: prod?.id || selectedProductId || 'GEN-SAS-001',
+        productName: prod?.name || 'SASAS (Copy)',
+        sku: prod?.sku || 'GEN-SAS-001',
         quantity: Number(quantity),
         reason,
         evidencePhotos: ['/dharm_logistics_hero.jpg'],
         inspectionNotes: notes,
         customerChoice: customerChoice,
-        refundAmount: customerChoice === 'Refund Amount' ? ((prod ? prod.unitPrice : 1250) * Number(quantity)) : undefined,
+        quarantineLocation: 'Vendor Hub Quarantine Bay Q-4B',
+        refundAmount: customerChoice === 'Refund Amount' ? ((prod ? prod.unitPrice : 0) * Number(quantity)) : undefined,
         refundStatus: customerChoice === 'Refund Amount' ? 'Pending' : undefined
       },
       user?.name || 'Anusha S (Customer)'

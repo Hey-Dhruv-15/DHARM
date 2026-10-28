@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 import uuid
 
@@ -11,11 +11,35 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(login_data: UserLogin, db: Session = Depends(get_db)):
-    email = login_data.email.strip().lower()
+async def login(request: Request, db: Session = Depends(get_db)):
+    content_type = request.headers.get("content-type", "")
+    email = None
+    password = None
+
+    if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+        form = await request.form()
+        email = form.get("username") or form.get("email")
+        password = form.get("password")
+    else:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                email = body.get("email") or body.get("username")
+                password = body.get("password")
+        except Exception:
+            pass
+
+    if not email or not password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing email (or username) and password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    email = str(email).strip().lower()
     user = db.query(User).filter(User.email.ilike(email)).first()
     
-    if not user or not verify_password(login_data.password, user.hashed_password):
+    if not user or not verify_password(str(password), user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

@@ -5,6 +5,12 @@ and sample shipments for instant out-of-the-box readiness.
 """
 import sys
 import os
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 from datetime import datetime, timedelta
 
 # Add parent directory to path

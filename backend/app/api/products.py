@@ -9,9 +9,26 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from sqlalchemy import or_, desc, asc
 from sqlalchemy.orm import Session
-import barcode
-from barcode.writer import ImageWriter
-import qrcode
+try:
+    import barcode
+    try:
+        from barcode.writer import ImageWriter
+    except Exception:
+        ImageWriter = None
+except Exception:
+    barcode = None
+    ImageWriter = None
+
+try:
+    import qrcode
+except Exception:
+    qrcode = None
+
+FALLBACK_1X1_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01"
+    b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 
 from app.database import get_db
 from app.models.product import Product

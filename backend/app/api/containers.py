@@ -555,7 +555,7 @@ def scan_product_barcode(
     if not container:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Container not found")
 
-    if container.status in ["Sealed", "Closed", "Archived", "Inactive"]:
+    if container.status in ["Closed", "Archived", "Inactive"]:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Container is not open for scanning"

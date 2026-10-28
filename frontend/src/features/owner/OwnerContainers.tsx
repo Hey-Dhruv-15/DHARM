@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
+import { containerApi } from '../../services/containerApi';
 import { OpenCvBarcodeScanner } from '../../components/scanner/OpenCvBarcodeScanner';
 import {
   Archive,
@@ -131,6 +132,25 @@ export const OwnerContainers: React.FC = () => {
     barcode: p.barcode,
     weightKg: getProductUnitWeight(p)
   }));
+
+  // Seal Container API (POST /api/v1/containers/{container_id}/seal)
+  const handleSealContainer = async (c: Container) => {
+    const sealNumber = prompt('Enter or confirm Tamper-Evident Seal Barcode:', c.sealNumber || `SEAL-SEC-${Math.floor(10000 + Math.random() * 90000)}`);
+    if (!sealNumber || !sealNumber.trim()) return;
+
+    try {
+      await containerApi.sealContainer(c.containerNumber || c.id, sealNumber.trim());
+      updateContainer(
+        c.id,
+        { sealNumber: sealNumber.trim().toUpperCase(), sealStatus: 'Active', status: 'Sealed' },
+        user?.name || 'Dhruva (Owner)',
+        role || undefined
+      );
+      alert(`Container ${c.containerNumber} sealed successfully with ${sealNumber.trim().toUpperCase()}`);
+    } catch (e: any) {
+      alert(`Error sealing container: ${e.message}`);
+    }
+  };
 
   // Open dedicated Scan Products modal for a specific container from the 3-dots menu
   const openScanModalForContainer = async (c: Container) => {

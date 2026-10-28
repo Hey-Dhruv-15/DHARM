@@ -970,6 +970,40 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setOrders(prev => [newOrder, ...prev]);
 
+    // Sync seamlessly with FastAPI backend
+    try {
+      fetch('http://localhost:8000/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerAccount: custName,
+          customerPoReference: orderData.customerPoNumber || newOrder.customerPoNumber,
+          deliveryLocation: `${newOrder.shippingAddress?.label || 'Primary Receiving Annex'} — ${newOrder.shippingAddress?.city || 'Bengaluru'}, ${newOrder.shippingAddress?.state || 'Karnataka'}`,
+          logisticsCarrier: orderData.logisticsProvider || 'Bluedart Express',
+          paymentTerms: orderData.paymentMethod || 'Corporate Net Banking',
+          orderRemarks: orderData.notes || '',
+          customerId: custId,
+          customerName: custName,
+          shippingAddress: newOrder.shippingAddress,
+          billingAddress: newOrder.billingAddress,
+          items: orderData.items.map(item => ({
+            productId: item.productId,
+            productName: item.productName,
+            sku: item.sku,
+            image: item.image,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            gstRate: item.gstRate,
+            totalPrice: item.totalPrice
+          }))
+        })
+      }).catch(err => {
+        console.warn('Backend order sync noticed:', err);
+      });
+    } catch (e) {
+      // Non-blocking fallback
+    }
+
     logAudit(
       actorName || custName,
       'CUSTOMER',

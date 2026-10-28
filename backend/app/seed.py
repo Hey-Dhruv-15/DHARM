@@ -24,6 +24,7 @@ from app.models.container import Container, ContainerItem
 from app.models.shipment import Shipment, ShipmentItem, ShipmentEvent
 from app.models.discrepancy import DiscrepancyCase
 from app.models.audit import AuditEvent
+from app.models.order import Order, OrderItem
 
 
 def seed_database():
@@ -314,17 +315,63 @@ def seed_database():
 
         # 5. Seed Audit Event
         print("📑 Checking audit log...")
-        aud = AuditEvent(
-            id="aud-init-01",
-            actor_name="Dhruva (Owner)",
-            actor_role="OWNER",
-            action="SYSTEM_INIT",
-            entity_type="System",
-            entity_id="sys-dharm",
-            details="DHARM ERP backend initialized with PostgreSQL master ledger.",
-            timestamp=datetime.utcnow()
-        )
-        db.add(aud)
+        if not db.query(AuditEvent).filter(AuditEvent.id == "aud-init-01").first():
+            aud = AuditEvent(
+                id="aud-init-01",
+                actor_name="Dhruva (Owner)",
+                actor_role="OWNER",
+                action="SYSTEM_INIT",
+                entity_type="System",
+                entity_id="sys-dharm",
+                details="DHARM ERP backend initialized with PostgreSQL master ledger.",
+                timestamp=datetime.utcnow()
+            )
+            db.add(aud)
+
+        # 6. Seed Demo Orders
+        print("🛒 Checking orders...")
+        if not db.query(Order).filter(Order.id == "ord-sample-01").first():
+            sample_order = Order(
+                id="ord-sample-01",
+                order_number="ORD-DHM-2026-8819",
+                customer_id="usr-cust-03",
+                customer_name="Anusha S (BioMed)",
+                customer_account="BioMed Advanced Research Diagnostics Pvt Ltd",
+                customer_po_reference="PO-BIO-2026-7835",
+                delivery_location="Primary Receiving Dock — Bengaluru, Karnataka",
+                logistics_carrier="Bluedart Express",
+                payment_terms="Corporate Net Banking",
+                order_remarks="Expedited clinical reagent delivery for cold storage bay.",
+                order_date=datetime.utcnow() - timedelta(days=2),
+                status="Processing",
+                expected_delivery_date=datetime.utcnow() + timedelta(days=2),
+                payment_status="Paid",
+                subtotal=29000.0,
+                tax_total=5220.0,
+                grand_total=34220.0,
+                shipping_address={"label": "Primary Receiving Dock", "addressLine1": "Plot 42, Electronic City Phase 1", "city": "Bengaluru", "state": "Karnataka", "postalCode": "560100"},
+                billing_address={"companyName": "BioMed Advanced Research Diagnostics Pvt Ltd", "addressLine1": "Plot 42, Electronic City", "city": "Bengaluru", "state": "Karnataka", "postalCode": "560100", "gstin": "29AABCU9603R1ZM"},
+                tracking_number="TRK-DHM-884920",
+                invoice_number="INV-DHM-2026-1049",
+                invoice_available=True,
+                can_cancel=True,
+                created_at=datetime.utcnow() - timedelta(days=2),
+                items=[
+                    OrderItem(
+                        id="ord-sample-01-item-1",
+                        order_id="ord-sample-01",
+                        product_id="prod-001",
+                        product_name="Cryo-Shield Specimen Transporter",
+                        sku="MED-CRYO-901",
+                        quantity=2,
+                        unit_price=14500.0,
+                        gst_rate=0.18,
+                        total_price=34220.0
+                    )
+                ]
+            )
+            db.add(sample_order)
+            print("  + Added demo order: ORD-DHM-2026-8819")
 
         db.commit()
         print("✅ Database seeding completed successfully!")

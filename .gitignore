@@ -35,3 +35,5 @@ venv/
 .pytest_cache/
 
 Thumbs.db
+*.db
+*.sqlite3

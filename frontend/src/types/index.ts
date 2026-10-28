@@ -48,6 +48,7 @@ export interface Product {
   name: string;
   category: string;
   barcode: string;
+  qrCode?: string;
   isSerialized: boolean;
   unit: string;
   billingUnit?: string;

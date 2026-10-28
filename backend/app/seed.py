@@ -1,4 +1,4 @@
-﻿"""
+"""
 Database Seed Script for DHARM Logistics ERP
 Initializes demo users, master catalog products, tamper-evident containers,
 and sample shipments for instant out-of-the-box readiness.
@@ -68,6 +68,24 @@ def seed_database():
                 "role": UserRoleEnum.CUSTOMER,
                 "organization": "BioMed Advanced Research Diagnostics",
                 "location": "BioMed Campus Bay 2, Tech Park",
+                "avatar": "Customer"
+            },
+            {
+                "id": "12",
+                "email": "sinu.vendor@dharm.com",
+                "name": "Sinu Gunshetty",
+                "role": UserRoleEnum.VENDOR,
+                "organization": "Trans-Express Regional Logistics",
+                "location": "Midwest Sorting Hub 4",
+                "avatar": "Vendor"
+            },
+            {
+                "id": "24",
+                "email": "anusha.biomed@dharm.com",
+                "name": "Anusha S (BioMed)",
+                "role": UserRoleEnum.CUSTOMER,
+                "organization": "BioMed Campus Bay 2",
+                "location": "BioMed Campus Bay 2",
                 "avatar": "Customer"
             }
         ]
@@ -162,11 +180,110 @@ def seed_database():
                 "currency": "INR",
                 "status": "Active",
                 "description": "High-throughput sensory classification model."
+            },
+            {
+                "id": "1005",
+                "sku": "SKU-0015",
+                "name": "Copper Wire",
+                "category": "Raw Materials & Cabling",
+                "barcode": "8901063139374",
+                "is_serialized": False,
+                "unit": "Roll",
+                "billing_unit": "One-time",
+                "stock_quantity": 150,
+                "reorder_level": 15,
+                "unit_price": 1250.0,
+                "gst_rate": 18.0,
+                "gross_price": 1475.0,
+                "currency": "INR",
+                "unit_weight": 0.5,
+                "status": "Active",
+                "description": "High conductivity copper wire roll (0.5 kg)."
+            },
+            {
+                "id": "1006",
+                "sku": "SKU-0016",
+                "name": "Switch",
+                "category": "Electrical & Controls",
+                "barcode": "8901063139375",
+                "is_serialized": False,
+                "unit": "Unit",
+                "billing_unit": "One-time",
+                "stock_quantity": 200,
+                "reorder_level": 20,
+                "unit_price": 450.0,
+                "gst_rate": 18.0,
+                "gross_price": 531.0,
+                "currency": "INR",
+                "unit_weight": 0.25,
+                "status": "Active",
+                "description": "Standard industrial electrical switch."
+            },
+            {
+                "id": "101",
+                "sku": "MED-CRYO-901",
+                "name": "Cryo-Shield Specimen Transporter",
+                "category": "Medical Transport & Cold Chain",
+                "barcode": "BC-MED-CRYO-0001",
+                "is_serialized": False,
+                "unit": "Unit",
+                "billing_unit": "One-time",
+                "stock_quantity": 100,
+                "reorder_level": 10,
+                "unit_price": 14500.0,
+                "gst_rate": 18.0,
+                "gross_price": 17110.0,
+                "currency": "INR",
+                "unit_weight": 2.5,
+                "status": "Active",
+                "description": "Precision thermal-insulated cold-chain specimen transporter."
+            },
+            {
+                "id": "102",
+                "sku": "BIO-DIAG-440",
+                "name": "OptiTrace Diagnostic Sensor Array",
+                "category": "Diagnostic Sensors",
+                "barcode": "BC-BIO-DIAG-0002",
+                "is_serialized": False,
+                "unit": "Unit",
+                "billing_unit": "One-time",
+                "stock_quantity": 80,
+                "reorder_level": 10,
+                "unit_price": 28000.0,
+                "gst_rate": 18.0,
+                "gross_price": 33040.0,
+                "currency": "INR",
+                "unit_weight": 1.2,
+                "status": "Active",
+                "description": "Multi-spectral optical diagnostic sensor array."
+            },
+            {
+                "id": "103",
+                "sku": "PHRM-COLD-102",
+                "name": "BioReagent Lyophilized Stabilizer",
+                "category": "Pharmaceutical Reagents",
+                "barcode": "BC-PHRM-COLD-0003",
+                "is_serialized": False,
+                "unit": "Unit",
+                "billing_unit": "One-time",
+                "stock_quantity": 120,
+                "reorder_level": 15,
+                "unit_price": 9500.0,
+                "gst_rate": 18.0,
+                "gross_price": 11210.0,
+                "currency": "INR",
+                "unit_weight": 0.8,
+                "status": "Active",
+                "description": "Stabilizing reagent for clinical and diagnostic specimens."
             }
         ]
 
         for p_data in initial_products:
-            existing = db.query(Product).filter(Product.id == p_data["id"]).first()
+            existing = db.query(Product).filter(
+                (Product.id == p_data["id"]) |
+                (Product.barcode == p_data["barcode"]) |
+                (Product.sku == p_data["sku"])
+            ).first()
             if not existing:
                 prod = Product(
                     id=p_data["id"],
@@ -183,15 +300,35 @@ def seed_database():
                     gst_rate=p_data["gst_rate"],
                     gross_price=p_data["gross_price"],
                     currency=p_data["currency"],
+                    unit_weight=p_data.get("unit_weight", 1.0),
                     status=p_data["status"],
                     description=p_data["description"]
                 )
                 db.add(prod)
                 print(f"  + Added product: {p_data['name']} ({p_data['sku']})")
+            else:
+                if "unit_weight" in p_data and (existing.unit_weight is None or existing.unit_weight == 1.0):
+                    existing.unit_weight = p_data["unit_weight"]
+                    db.commit()
 
         # 3. Seed Containers
         print("[CONTAINERS] Checking tamper-evident containers...")
         initial_containers = [
+            {
+                "id": "1001",
+                "container_number": "CNT-ALPHA-881",
+                "type": "Standard Container",
+                "max_capacity": 150.0,
+                "capacity_unit": "Kilograms (kg)",
+                "capacity_kg": 150.0,
+                "current_weight_kg": 0.0,
+                "utilized_capacity": 0.0,
+                "seal_number": "SEAL-SEC-88100",
+                "seal_status": "Active",
+                "initial_location": "Central Warehouse Bay 4",
+                "location": "Central Warehouse Bay 4",
+                "status": "IN_PROGRESS"
+            },
             {
                 "id": "cnt-001",
                 "container_number": "CNT-2026-001",
@@ -319,6 +456,124 @@ def seed_database():
             ]
             db.add_all(events)
             print("  + Added shipment: DHRM-TRK-77421")
+
+        # Seed Demo Discrepancy Shipment SHP-2026-001
+        existing_demo_shp = db.query(Shipment).filter(Shipment.id == "SHP-2026-001").first()
+        if not existing_demo_shp:
+            demo_shp = Shipment(
+                id="SHP-2026-001",
+                tracking_number="TRK-DHM-884920",
+                owner_id="usr-owner-01",
+                owner_name="Dhruva (Owner)",
+                vendor_id="12",
+                vendor_name="Sinu Gunshetty (Trans-Express)",
+                customer_id="24",
+                customer_name="Anusha S (BioMed)",
+                origin="Apex Central Depot (Hub Alpha)",
+                destination="BioMed Research Campus Bay 2",
+                status="discrepancy",
+                manifest_locked=True,
+                container_ids=["CNT-ALPHA-881"],
+                manifest_hash="0x7890abcdef123456",
+                dispatch_date=datetime(2026, 10, 26, 8, 0, 0),
+                notes="Cold-chain priority handling required.",
+                created_at=datetime(2026, 10, 26, 7, 30, 0)
+            )
+            db.add(demo_shp)
+            db.flush()
+
+            demo_items = [
+                ShipmentItem(
+                    id="sitem-demo-001",
+                    shipment_id="SHP-2026-001",
+                    product_id="101",
+                    product_name="Cryo-Shield Specimen Transporter",
+                    sku="MED-CRYO-901",
+                    barcode="BC-MED-CRYO-0001",
+                    container_id="CNT-ALPHA-881",
+                    container_number="CNT-ALPHA-881",
+                    expected_quantity=12,
+                    verified_quantity=10,
+                    scanned_quantity=10,
+                    status="Pending"
+                ),
+                ShipmentItem(
+                    id="sitem-demo-002",
+                    shipment_id="SHP-2026-001",
+                    product_id="102",
+                    product_name="OptiTrace Diagnostic Sensor Array",
+                    sku="BIO-DIAG-440",
+                    barcode="BC-BIO-DIAG-0002",
+                    container_id="CNT-ALPHA-881",
+                    container_number="CNT-ALPHA-881",
+                    expected_quantity=8,
+                    verified_quantity=8,
+                    scanned_quantity=8,
+                    status="Verified"
+                ),
+                ShipmentItem(
+                    id="sitem-demo-003",
+                    shipment_id="SHP-2026-001",
+                    product_id="103",
+                    product_name="BioReagent Lyophilized Stabilizer",
+                    sku="PHRM-COLD-102",
+                    barcode="BC-PHRM-COLD-0003",
+                    container_id="CNT-SEC-409",
+                    container_number="CNT-SEC-409",
+                    expected_quantity=20,
+                    verified_quantity=20,
+                    scanned_quantity=20,
+                    status="Verified"
+                )
+            ]
+            db.add_all(demo_items)
+
+            # Discrepancy Case
+            disc_case = DiscrepancyCase(
+                id="dsp-demo-001",
+                discrepancy_number="DSP-2026-001",
+                shipment_id="SHP-2026-001",
+                shipment_tracking="TRK-DHM-884920",
+                container_id="CNT-ALPHA-881",
+                container_number="CNT-ALPHA-881",
+                product_id="101",
+                product_name="Cryo-Shield Specimen Transporter",
+                sku="MED-CRYO-901",
+                type="shortage",
+                severity="Medium",
+                status="open",
+                expected_quantity=12,
+                observed_quantity=10,
+                detection_stage="Midwest Sorting Hub 4 Scanning Bay",
+                detected_by="System",
+                resolution_notes="2 units are unaccounted for.",
+                detected_at=datetime(2026, 10, 27, 3, 10, 0)
+            )
+            db.add(disc_case)
+
+            # Events
+            demo_events = [
+                ShipmentEvent(
+                    id="evt-demo-001",
+                    shipment_id="SHP-2026-001",
+                    status="dispatched",
+                    location="Apex Central Depot Gate 3",
+                    performed_by="Dhruva (Owner)",
+                    notes="Manifest locked and handed over to freight carrier.",
+                    timestamp=datetime(2026, 10, 26, 8, 0, 0)
+                ),
+                ShipmentEvent(
+                    id="evt-demo-002",
+                    shipment_id="SHP-2026-001",
+                    status="discrepancy_detected",
+                    location="Midwest Sorting Hub 4 Scanning Bay",
+                    performed_by="System",
+                    notes="Observed count 10/12 for SKU MED-CRYO-901.",
+                    timestamp=datetime(2026, 10, 27, 3, 10, 0)
+                )
+            ]
+            db.add_all(demo_events)
+            print("  + Added demo shipment: SHP-2026-001")
 
         # 5. Seed Audit Event
         print("[AUDIT] Checking audit log...")

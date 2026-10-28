@@ -2,6 +2,7 @@ from app.schemas.user import UserBase, UserCreate, UserLogin, UserOut, TokenResp
 from app.schemas.product import ProductBase, ProductCreate, ProductUpdate, ProductOut
 from app.schemas.container import (
     ContainerBase, ContainerCreate, ContainerUpdate, ContainerOut,
+    ContainerData, ContainerCreateResponse,
     ContainerItemBase, ContainerItemCreate, ContainerItemOut
 )
 from app.schemas.shipment import (
@@ -27,6 +28,7 @@ __all__ = [
     "UserBase", "UserCreate", "UserLogin", "UserOut", "TokenResponse",
     "ProductBase", "ProductCreate", "ProductUpdate", "ProductOut",
     "ContainerBase", "ContainerCreate", "ContainerUpdate", "ContainerOut",
+    "ContainerData", "ContainerCreateResponse",
     "ContainerItemBase", "ContainerItemCreate", "ContainerItemOut",
     "ShipmentBase", "ShipmentCreate", "ShipmentUpdate", "ShipmentOut",
     "ShipmentItemBase", "ShipmentItemOut", "ShipmentEventBase", "ShipmentEventOut",

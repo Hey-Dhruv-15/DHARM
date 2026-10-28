@@ -11,7 +11,7 @@ class Container(Base):
     container_number = Column(String(100), unique=True, index=True, nullable=False)
     type = Column(String(100), nullable=False, default="Standard Container")
     max_capacity = Column(Float, default=100.0)
-    capacity_unit = Column(String(20), default="kg")
+    capacity_unit = Column(String(50), default="kg")
     capacity_kg = Column(Float, default=100.0)
     current_weight_kg = Column(Float, default=0.0)
     utilized_capacity = Column(Float, default=0.0)
@@ -20,14 +20,17 @@ class Container(Base):
     initial_location = Column(String(255), default="Central Distribution Center, Hub Alpha")
     location = Column(String(255), default="Central Distribution Center, Hub Alpha")
     description = Column(Text, nullable=True)
-    status = Column(String(50), default="Empty")
+    status = Column(String(50), default="Available")
+    initialization_status = Column(String(50), default="Initialized")
     assigned_shipment_id = Column(String(64), nullable=True)
     assigned_shipment_tracking = Column(String(100), nullable=True)
     created_by = Column(String(255), default="System")
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = Column(Boolean, default=True)
 
     items = relationship("ContainerItem", back_populates="container", cascade="all, delete-orphan")
+    products_association = relationship("ContainerProduct", back_populates="container", cascade="all, delete-orphan")
 
 
 class ContainerItem(Base):
@@ -45,3 +48,12 @@ class ContainerItem(Base):
     scanned_at = Column(DateTime, default=datetime.utcnow)
 
     container = relationship("Container", back_populates="items")
+
+    @property
+    def unit_weight(self) -> float:
+        return self.unit_weight_kg
+
+    @property
+    def total_weight(self) -> float:
+        return self.weight_kg
+

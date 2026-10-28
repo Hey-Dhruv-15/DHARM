@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, String, Integer, Boolean, Text, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -18,6 +18,7 @@ class Shipment(Base):
     origin = Column(String(255), nullable=False)
     destination = Column(String(255), nullable=False)
     status = Column(String(50), default="Draft", index=True)
+    manifest_locked = Column(Boolean, default=False)
     container_ids = Column(JSON, default=list)  # list of container string IDs
     manifest_hash = Column(String(255), nullable=True)
     dispatch_date = Column(DateTime, nullable=True)

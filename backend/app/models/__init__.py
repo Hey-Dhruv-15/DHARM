@@ -1,6 +1,7 @@
 from app.models.user import User, UserRoleEnum
 from app.models.product import Product
 from app.models.container import Container, ContainerItem
+from app.models.container_product import ContainerProduct
 from app.models.shipment import Shipment, ShipmentItem, ShipmentEvent
 from app.models.discrepancy import DiscrepancyCase, DiscrepancyEvidence
 from app.models.scan import ScanRecord
@@ -14,6 +15,7 @@ __all__ = [
     "Product",
     "Container",
     "ContainerItem",
+    "ContainerProduct",
     "Shipment",
     "ShipmentItem",
     "ShipmentEvent",

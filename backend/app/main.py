@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
@@ -41,6 +43,25 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = []
+    for err in exc.errors():
+        msg = err.get("msg", "")
+        if msg.startswith("Value error, "):
+            msg = msg.replace("Value error, ", "", 1)
+        errors.append({
+            "loc": list(err.get("loc", [])),
+            "msg": msg,
+            "type": err.get("type")
+        })
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": errors}
+    )
+
+
 # CORS Middleware configuration
 app.add_middleware(
     CORSMiddleware,
@@ -50,8 +71,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API Router under /api prefix
+# Include API Router under both /api and /api/v1 prefixes
 app.include_router(api_router, prefix=settings.API_V1_STR)
+if settings.API_V1_STR != "/api/v1":
+    app.include_router(api_router, prefix="/api/v1")
 
 
 @app.get("/", tags=["Root"])
@@ -62,3 +85,6 @@ def root():
         "health": f"{settings.API_V1_STR}/health",
         "version": settings.VERSION
     }
+
+# Container Barcode Scanning API verified
+

@@ -1,15 +1,10 @@
 import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
-import { Modal } from '../../components/common/Modal';
 import { OpenCvBarcodeScanner } from '../../components/scanner/OpenCvBarcodeScanner';
 import {
   Archive,
   Plus,
-  Shield,
-  Lock,
-  Truck,
-  Copy,
   CheckCircle2,
   AlertTriangle,
   MoreVertical,
@@ -18,9 +13,7 @@ import {
   Ban,
   Trash2,
   Package,
-  Layers,
   Sparkles,
-  Info,
   X,
   Search,
   Filter,
@@ -45,16 +38,6 @@ const CONTAINER_TYPES: ContainerType[] = [
   'Heavy Duty Tote',
   'Standard Container'
 ];
-
-interface ScannedProductItem {
-  productId: string;
-  productName: string;
-  sku: string;
-  barcode: string;
-  quantity: number;
-  unitWeight: number;
-  totalWeight: number;
-}
 
 export const OwnerContainers: React.FC = () => {
   const { containers, createContainer, updateContainer, toggleContainerStatus, shipments, products } = useData();
@@ -81,6 +64,9 @@ export const OwnerContainers: React.FC = () => {
   } | null>(null);
   const [containerScanError, setContainerScanError] = useState<string | null>(null);
   const [isContainerScanning, setIsContainerScanning] = useState<boolean>(false);
+  const [barcodeInput, setBarcodeInput] = useState<string>('');
+  const [isScanningApi, setIsScanningApi] = useState<boolean>(false);
+  const [scanApiSuccess, setScanApiSuccess] = useState<string | null>(null);
 
   // Dropdown menu state for cards
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -93,32 +79,9 @@ export const OwnerContainers: React.FC = () => {
   const [sealNumber, setSealNumber] = useState('');
   const [initialLocation, setInitialLocation] = useState(WAREHOUSE_LOCATIONS[0]);
   const [description, setDescription] = useState('');
-
-  // 2. Scan Products State
-  const [isScanning, setIsScanning] = useState(false);
-  const [scannedItems, setScannedItems] = useState<ScannedProductItem[]>([]);
-  const [capacityError, setCapacityError] = useState<string | null>(null);
-
-  // Helper for generating standard unit weights for catalog products
-  const getProductUnitWeight = (product: Product): number => {
-    if (product.sku.includes('CRYO')) return 3.5;
-    if (product.sku.includes('SENS')) return 1.2;
-    if (product.sku.includes('BIO')) return 0.8;
-    if (product.sku.includes('FILT')) return 1.5;
-    if (product.sku.includes('GATE')) return 4.0;
-    if (product.sku.includes('SEC')) return 2.5;
-    if (product.sku.includes('APL')) return 3.5;
-    if (product.sku.includes('MKT')) return 2.0;
-    return 2.5; // standard fallback 2.5 kg/unit
-  };
-
-  // Products available for testing scanner
-  const simulationProducts = products.slice(0, 8).map(p => ({
-    name: p.name,
-    sku: p.sku,
-    barcode: p.barcode,
-    weightKg: getProductUnitWeight(p)
-  }));
+  const [isCreatingContainer, setIsCreatingContainer] = useState(false);
+  const [createContainerError, setCreateContainerError] = useState<string | null>(null);
+  const [createContainerSuccess, setCreateContainerSuccess] = useState<string | null>(null);
 
   // Auto-generate container number & seal
   const handleAutoFill = () => {
@@ -140,220 +103,191 @@ export const OwnerContainers: React.FC = () => {
   // Open Create Modal
   const openCreateModal = () => {
     handleAutoFill();
-    setScannedItems([]);
-    setCapacityError(null);
-    setIsScanning(false);
     setDescription('');
     setMaxCapacity(150);
     setCapacityUnit('kg');
+    setCreateContainerError(null);
+    setCreateContainerSuccess(null);
+    setIsCreatingContainer(false);
     setCreateModalOpen(true);
   };
 
-  // Dynamic calculations for Scanned Products
-  const currentUtilizedCapacity = scannedItems.reduce((acc, i) => acc + i.totalWeight, 0);
-  const currentTotalUnits = scannedItems.reduce((acc, i) => acc + i.quantity, 0);
-  const utilizedPercent =
-    maxCapacity > 0 ? Math.min(100, Math.round((currentUtilizedCapacity / Number(maxCapacity)) * 100)) : 0;
-
-  // Real-time Barcode Scan Handler with Capacity Validation & Automatic Quantity Updates
-  const handleBarcodeScan = (barcode: string): boolean => {
-    const cleanCode = barcode.trim().toUpperCase();
-
-    // Match exact catalog product, or select a product from the catalog for the scanned barcode
-    const exactProduct = products.find(
-      p =>
-        p.barcode.trim().toUpperCase() === cleanCode ||
-        p.sku.trim().toUpperCase() === cleanCode
-    );
-
-    const selectedProduct = exactProduct || (products.length > 0
-      ? products[Math.abs(cleanCode.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % products.length]
-      : null);
-
-    const productId = selectedProduct ? `prod-${selectedProduct.id}-${cleanCode.slice(-4)}` : `prod-${cleanCode}`;
-    const productName = selectedProduct ? selectedProduct.name : `Scanned Product (${cleanCode})`;
-    const productSku = selectedProduct ? selectedProduct.sku : `SKU-${cleanCode.slice(0, 8)}`;
-    const unitWeight = selectedProduct ? getProductUnitWeight(selectedProduct) : 2.0;
-
-    // CAPACITY VALIDATION before accepting each scan!
-    if (currentUtilizedCapacity + unitWeight > Number(maxCapacity)) {
-      setCapacityError(
-        `⚠️ Capacity limit exceeded! Cannot add "${productName}" (+${unitWeight} ${capacityUnit}). Max capacity is ${maxCapacity} ${capacityUnit} (Current: ${currentUtilizedCapacity.toFixed(1)} ${capacityUnit}).`
-      );
-      return false;
-    }
-
-    // Capacity validated, clear any prior error
-    setCapacityError(null);
-
-    // Automatic quantity updates when the same barcode is scanned again
-    setScannedItems(prev => {
-      const existingIdx = prev.findIndex(item => item.productId === productId);
-      if (existingIdx >= 0) {
-        const updated = [...prev];
-        const existing = updated[existingIdx];
-        const newQty = existing.quantity + 1;
-        updated[existingIdx] = {
-          ...existing,
-          quantity: newQty,
-          totalWeight: Number((newQty * existing.unitWeight).toFixed(2))
-        };
-        return updated;
-      } else {
-        return [
-          ...prev,
-          {
-            productId: productId,
-            productName: productName,
-            sku: productSku,
-            barcode: cleanCode,
-            quantity: 1,
-            unitWeight: unitWeight,
-            totalWeight: unitWeight
-          }
-        ];
-      }
-    });
-
-    return true;
+  // Helper for generating standard unit weights for catalog products
+  const getProductUnitWeight = (product: Product): number => {
+    if (product.sku.includes('CRYO')) return 3.5;
+    if (product.sku.includes('SENS')) return 1.2;
+    if (product.sku.includes('BIO')) return 0.8;
+    if (product.sku.includes('FILT')) return 1.5;
+    if (product.sku.includes('GATE')) return 4.0;
+    if (product.sku.includes('SEC')) return 2.5;
+    if (product.sku.includes('APL')) return 3.5;
+    if (product.sku.includes('MKT')) return 2.0;
+    return 2.5; // standard fallback 2.5 kg/unit
   };
 
-  // Remove product from scanned list ("remove in UI please :>")
-  const handleRemoveScannedItem = (productId: string) => {
-    setScannedItems(prev => prev.filter(item => item.productId !== productId));
-    setCapacityError(null);
-  };
-
-  // Adjust quantity manually in Scanned Products List
-  const handleAdjustQuantity = (productId: string, delta: number) => {
-    const item = scannedItems.find(i => i.productId === productId);
-    if (!item) return;
-
-    if (delta > 0) {
-      // Check capacity before incrementing
-      if (currentUtilizedCapacity + item.unitWeight > Number(maxCapacity)) {
-        setCapacityError(
-          `⚠️ Capacity limit exceeded! Cannot add another unit of "${item.productName}". Max capacity is ${maxCapacity} ${capacityUnit}.`
-        );
-        return;
-      }
-    }
-
-    setCapacityError(null);
-    setScannedItems(prev =>
-      prev
-        .map(i => {
-          if (i.productId !== productId) return i;
-          const newQty = i.quantity + delta;
-          if (newQty <= 0) return null;
-          return {
-            ...i,
-            quantity: newQty,
-            totalWeight: Number((newQty * i.unitWeight).toFixed(2))
-          };
-        })
-        .filter(Boolean) as ScannedProductItem[]
-    );
-  };
+  const simulationProducts = products.map(p => ({
+    name: p.name,
+    sku: p.sku,
+    barcode: p.barcode,
+    weightKg: getProductUnitWeight(p)
+  }));
 
   // Open dedicated Scan Products modal for a specific container from the 3-dots menu
-  const openScanModalForContainer = (c: Container) => {
+  const openScanModalForContainer = async (c: Container) => {
     setScanModalContainer(c);
     setContainerScanItems(c.items ? [...c.items] : []);
     setLiveScannedCode(null);
     setLiveScannedItemInfo(null);
     setContainerScanError(null);
     setIsContainerScanning(false);
+    setBarcodeInput('');
+    setScanApiSuccess(null);
+
+    // Fetch latest manifest directly from backend
+    try {
+      const res = await fetch(`http://localhost:8000/api/v1/containers/${encodeURIComponent(c.containerNumber || c.id)}`);
+      if (res.ok) {
+        const fullContainer = await res.json();
+        const rawItems = fullContainer.items || fullContainer.products || [];
+        const formattedItems: ContainerScannedItem[] = rawItems.map((it: any) => ({
+          productId: it.productId || it.product_id || it.id,
+          productName: it.productName || it.product_name,
+          sku: it.sku,
+          barcode: it.barcode,
+          quantity: it.quantity,
+          unitWeightKg: Number(it.unitWeightKg || it.unit_weight_kg || it.unitWeight || it.unit_weight || 1),
+          weightKg: Number(it.weightKg || it.weight_kg || it.totalWeight || it.total_weight || 1),
+          scannedAt: it.scannedAt || it.scanned_at || new Date().toISOString()
+        }));
+
+        setContainerScanItems(formattedItems);
+        updateContainer(
+          c.id,
+          {
+            items: formattedItems,
+            currentWeightKg: fullContainer.currentWeightKg ?? fullContainer.current_weight_kg,
+            utilizedCapacity: fullContainer.utilizedCapacity ?? fullContainer.utilized_capacity,
+            status: fullContainer.status
+          },
+          user?.name || 'Dhruva (Owner)',
+          role || undefined
+        );
+      }
+    } catch (e) {
+      // offline fallback
+    }
   };
 
-  // Real-time Barcode Scan Handler for existing container (accepts real physical barcodes)
+  // Dedicated Barcode Scanner API Integration (POST /api/v1/containers/{container_id}/products/scan)
+  const addBarcode = async (containerIdentifier: string, barcodeToScan: string) => {
+    const cleanCode = barcodeToScan.trim();
+    if (!cleanCode) return null;
+
+    setIsScanningApi(true);
+    setContainerScanError(null);
+    setScanApiSuccess(null);
+
+    try {
+      const response = await fetch(
+        `http://localhost:8000/api/v1/containers/${encodeURIComponent(containerIdentifier)}/products/scan`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ barcode: cleanCode })
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Failed to add product to container');
+      }
+
+      // Reload container manifest from backend (GET /api/v1/containers/{id})
+      try {
+        const getRes = await fetch(
+          `http://localhost:8000/api/v1/containers/${encodeURIComponent(containerIdentifier)}`
+        );
+        if (getRes.ok) {
+          const fullContainer = await getRes.json();
+          const rawItems = fullContainer.items || fullContainer.products || [];
+          const formattedItems: ContainerScannedItem[] = rawItems.map((it: any) => ({
+            productId: it.productId || it.product_id || it.id,
+            productName: it.productName || it.product_name,
+            sku: it.sku,
+            barcode: it.barcode,
+            quantity: it.quantity,
+            unitWeightKg: Number(it.unitWeightKg || it.unit_weight_kg || it.unitWeight || it.unit_weight || 1),
+            weightKg: Number(it.weightKg || it.weight_kg || it.totalWeight || it.total_weight || 1),
+            scannedAt: it.scannedAt || it.scanned_at || new Date().toISOString()
+          }));
+
+          setContainerScanItems(formattedItems);
+          updateContainer(
+            scanModalContainer?.id || containerIdentifier,
+            {
+              items: formattedItems,
+              currentWeightKg: fullContainer.currentWeightKg ?? fullContainer.current_weight_kg,
+              utilizedCapacity: fullContainer.utilizedCapacity ?? fullContainer.utilized_capacity,
+              status: fullContainer.status
+            },
+            user?.name || 'Dhruva (Owner)',
+            role || undefined
+          );
+        }
+      } catch (getErr) {
+        console.warn('Could not refresh container manifest from backend:', getErr);
+      }
+
+      const p = data.product;
+      const pName = p.product_name || p.productName || 'Scanned Product';
+      const pQty = p.quantity || 1;
+      const pBc = p.barcode || cleanCode;
+      const pWeight = Number(p.unit_weight || p.unitWeight || 1.0);
+
+      setScanApiSuccess(`Success! Added ${pName} (Qty: ${pQty})`);
+      setLiveScannedCode(pBc);
+      setLiveScannedItemInfo({
+        name: pName,
+        sku: p.sku || 'SKU-SCAN',
+        weight: pWeight,
+        barcode: pBc
+      });
+      setBarcodeInput('');
+      setTimeout(() => setScanApiSuccess(null), 3500);
+      return data;
+    } catch (err: any) {
+      setContainerScanError(err.message || 'Error communicating with barcode scanner API');
+      return null;
+    } finally {
+      setIsScanningApi(false);
+    }
+  };
+
+  // Real-time Barcode Scan Handler for existing container (accepts real physical barcodes from OpenCV Camera)
   const handleContainerBarcodeScan = (barcode: string): boolean => {
     if (!scanModalContainer) return false;
-    const cleanCode = barcode.trim().toUpperCase();
-
-    // Match exact catalog product, or select a product from the catalog for the scanned barcode
-    const exactProduct = products.find(
-      p =>
-        p.barcode.trim().toUpperCase() === cleanCode ||
-        p.sku.trim().toUpperCase() === cleanCode
-    );
-
-    const selectedProduct = exactProduct || (products.length > 0
-      ? products[Math.abs(cleanCode.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % products.length]
-      : null);
-
-    const productId = selectedProduct ? `prod-${selectedProduct.id}-${cleanCode.slice(-4)}` : `prod-${cleanCode}`;
-    const productName = selectedProduct ? selectedProduct.name : `Scanned Product (${cleanCode})`;
-    const productSku = selectedProduct ? selectedProduct.sku : `SKU-${cleanCode.slice(0, 8)}`;
-    const unitWeight = selectedProduct ? getProductUnitWeight(selectedProduct) : 2.0;
-
-    // Display the scanned real barcode value directly on screen!
-    setLiveScannedCode(cleanCode);
-    setLiveScannedItemInfo({
-      name: productName,
-      sku: productSku,
-      weight: unitWeight,
-      barcode: cleanCode
-    });
-
-    const maxCap = scanModalContainer.maxCapacity || scanModalContainer.capacityKg || 150;
-    const currentUtilized = containerScanItems.reduce((acc, i) => acc + (i.weightKg || i.unitWeightKg * i.quantity), 0);
-
-    // Capacity validation before accepting scan!
-    if (currentUtilized + unitWeight > maxCap) {
-      setContainerScanError(
-        `⚠️ Capacity limit exceeded! Cannot add "${productName}" (+${unitWeight} ${scanModalContainer.capacityUnit || 'kg'}). Maximum container capacity is ${maxCap} ${scanModalContainer.capacityUnit || 'kg'} (Currently at ${currentUtilized.toFixed(1)}).`
-      );
-      return false;
-    }
-
-    setContainerScanError(null);
-
-    let updatedItems: ContainerScannedItem[] = [];
-    const existingIndex = containerScanItems.findIndex(i => i.productId === productId);
-
-    if (existingIndex >= 0) {
-      updatedItems = containerScanItems.map((item, idx) => {
-        if (idx !== existingIndex) return item;
-        const newQty = item.quantity + 1;
-        return {
-          ...item,
-          quantity: newQty,
-          weightKg: Number((newQty * item.unitWeightKg).toFixed(2))
-        };
-      });
-    } else {
-      updatedItems = [
-        ...containerScanItems,
-        {
-          productId: productId,
-          productName: productName,
-          sku: productSku,
-          barcode: cleanCode,
-          quantity: 1,
-          unitWeightKg: unitWeight,
-          weightKg: unitWeight,
-          scannedAt: new Date().toISOString()
-        }
-      ];
-    }
-
-    setContainerScanItems(updatedItems);
-
-    // Automatically update container in DataContext
-    updateContainer(
-      scanModalContainer.id,
-      { items: updatedItems },
-      user?.name || 'Dhruva (Owner)',
-      role || undefined
-    );
-
+    addBarcode(scanModalContainer.containerNumber, barcode);
     return true;
   };
 
-  // Remove product from container in UI ("remove in UI please :>")
-  const handleRemoveContainerItem = (productId: string) => {
+  // Remove product from container in UI & Backend ("remove in UI please :>")
+  const handleRemoveContainerItem = async (productId: string) => {
     if (!scanModalContainer) return;
+    const targetItem = containerScanItems.find(i => i.productId === productId);
+    const identifier = targetItem?.barcode || targetItem?.sku || productId;
+
+    try {
+      await fetch(
+        `http://localhost:8000/api/v1/containers/${encodeURIComponent(scanModalContainer.containerNumber)}/products/${encodeURIComponent(identifier)}`,
+        { method: 'DELETE' }
+      );
+    } catch (e) {
+      console.warn('Backend DELETE error, removing in local state:', e);
+    }
+
     const updated = containerScanItems.filter(i => i.productId !== productId);
     setContainerScanItems(updated);
     setContainerScanError(null);
@@ -404,63 +338,137 @@ export const OwnerContainers: React.FC = () => {
     );
   };
 
-  // Form Submit: Create Container
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  // Form Submit: Create Container via POST /api/v1/containers
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateContainerError(null);
+    setCreateContainerSuccess(null);
 
-    if (!containerNumber.trim()) {
-      alert('Please provide a unique Container Number.');
+    const cleanNum = containerNumber.trim().toUpperCase();
+    const cleanSeal = sealNumber.trim().toUpperCase();
+
+    if (!cleanNum) {
+      setCreateContainerError('Please provide a unique Container Number.');
       return;
     }
-    if (!sealNumber.trim()) {
-      alert('Please provide a Tamper-Evident Seal Number.');
+    if (!cleanSeal) {
+      setCreateContainerError('Please provide a Tamper-Evident Seal Number.');
+      return;
+    }
+    if (Number(maxCapacity) <= 0) {
+      setCreateContainerError('Maximum capacity must be greater than zero');
       return;
     }
 
-    // Verify Container Number uniqueness
-    const exists = containers.some(
-      c => c.containerNumber.toUpperCase() === containerNumber.trim().toUpperCase()
-    );
-    if (exists) {
-      alert(`Container Number "${containerNumber}" already exists. Please use a unique number.`);
-      return;
+    const unitFormatted =
+      capacityUnit === 'kg'
+        ? 'Kilograms (kg)'
+        : capacityUnit === 'lbs'
+        ? 'Pounds (lbs)'
+        : capacityUnit === 'units'
+        ? 'Discrete Units (count)'
+        : capacityUnit;
+
+    const payload = {
+      containerNumber: cleanNum,
+      containerType: containerType,
+      maximumCapacity: Number(maxCapacity),
+      capacityUnit: unitFormatted,
+      tamperEvidentSealNumber: cleanSeal,
+      initialLocation: initialLocation.trim(),
+      description: description.trim() || undefined
+    };
+
+    setIsCreatingContainer(true);
+
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/containers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const json = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          setCreateContainerError(json.detail || 'Container number already exists');
+          setIsCreatingContainer(false);
+          return;
+        }
+        if (response.status === 422 && Array.isArray(json.detail)) {
+          const msgs = json.detail.map((d: any) => d.msg).join('; ');
+          setCreateContainerError(msgs || 'Validation error');
+          setIsCreatingContainer(false);
+          return;
+        }
+        setCreateContainerError(json.detail || 'Failed to create container');
+        setIsCreatingContainer(false);
+        return;
+      }
+
+      // 201 Created Success
+      const createdData = json.data;
+      createContainer(
+        {
+          id: createdData.id || cleanNum,
+          containerNumber: createdData.containerNumber || cleanNum,
+          type: (createdData.containerType as ContainerType) || containerType,
+          maxCapacity: Number(createdData.maximumCapacity || maxCapacity),
+          capacityUnit: capacityUnit,
+          capacityKg: Number(createdData.maximumCapacity || maxCapacity),
+          currentWeightKg: 0,
+          utilizedCapacity: 0,
+          sealNumber: createdData.tamperEvidentSealNumber || cleanSeal,
+          initialLocation: createdData.initialLocation || initialLocation,
+          location: createdData.initialLocation || initialLocation,
+          description: createdData.description || description.trim(),
+          status: 'Active',
+          assignedShipmentTracking: 'Unassigned',
+          itemCount: 0,
+          items: []
+        },
+        user?.name || 'Dhruva (Owner)',
+        role || 'OWNER'
+      );
+
+      setCreateContainerSuccess(json.message || 'Container created and initialized successfully');
+      setTimeout(() => {
+        setIsCreatingContainer(false);
+        setCreateModalOpen(false);
+      }, 1000);
+    } catch (err: any) {
+      console.warn('Backend unavailable, falling back to local state:', err);
+      // Fallback if offline
+      createContainer(
+        {
+          containerNumber: cleanNum,
+          type: containerType,
+          maxCapacity: Number(maxCapacity),
+          capacityUnit,
+          capacityKg: Number(maxCapacity),
+          currentWeightKg: 0,
+          utilizedCapacity: 0,
+          sealNumber: cleanSeal,
+          initialLocation,
+          location: initialLocation,
+          description: description.trim(),
+          status: 'Active',
+          assignedShipmentTracking: 'Unassigned',
+          itemCount: 0,
+          items: []
+        },
+        user?.name || 'Dhruva (Owner)',
+        role || 'OWNER'
+      );
+      setCreateContainerSuccess('Container created locally');
+      setTimeout(() => {
+        setIsCreatingContainer(false);
+        setCreateModalOpen(false);
+      }, 1000);
     }
-
-    // Build items payload
-    const itemsPayload = scannedItems.map(item => ({
-      productId: item.productId,
-      productName: item.productName,
-      sku: item.sku,
-      barcode: item.barcode,
-      quantity: item.quantity,
-      unitWeightKg: item.unitWeight,
-      weightKg: item.totalWeight,
-      scannedAt: new Date().toISOString()
-    }));
-
-    createContainer(
-      {
-        containerNumber: containerNumber.trim().toUpperCase(),
-        type: containerType,
-        maxCapacity: Number(maxCapacity),
-        capacityUnit,
-        capacityKg: Number(maxCapacity),
-        currentWeightKg: currentUtilizedCapacity,
-        utilizedCapacity: currentUtilizedCapacity,
-        sealNumber: sealNumber.trim().toUpperCase(),
-        initialLocation,
-        location: initialLocation,
-        description: description.trim(),
-        status: 'Active',
-        assignedShipmentTracking: 'Unassigned',
-        itemCount: currentTotalUnits,
-        items: itemsPayload
-      },
-      user?.name || 'Dhruva (Owner)',
-      role || 'OWNER'
-    );
-
-    setCreateModalOpen(false);
   };
 
   // Filtered containers
@@ -725,16 +733,16 @@ export const OwnerContainers: React.FC = () => {
       {/* ======================================================== */}
       {createModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl text-white overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl text-white overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="p-5 sm:p-6 border-b border-slate-800 flex items-center justify-between bg-slate-950">
               <div>
                 <h3 className="text-base sm:text-lg font-extrabold text-white tracking-tight flex items-center gap-2">
                   <Archive className="w-5 h-5 text-indigo-400" />
-                  <span>Provision New Container & Scan Products</span>
+                  <span>Provision New Container</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Configure container parameters and continuously scan product barcodes with OpenCV.
+                  Configure container parameters, capacity, and tamper-evident seal tracking.
                 </p>
               </div>
 
@@ -749,11 +757,25 @@ export const OwnerContainers: React.FC = () => {
 
             {/* Modal Scrollable Body */}
             <form onSubmit={handleCreateSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
-              {/* SECTION 1: CONTAINER INFORMATION */}
+              {createContainerError && (
+                <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center gap-2.5 text-xs text-rose-300 animate-in fade-in">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{createContainerError}</span>
+                </div>
+              )}
+
+              {createContainerSuccess && (
+                <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-2.5 text-xs text-emerald-300 animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{createContainerSuccess}</span>
+                </div>
+              )}
+
+              {/* CONTAINER INFORMATION */}
               <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800 space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
-                    <span>1. Container Information</span>
+                    <span>Container Information</span>
                   </h4>
                   <button
                     type="button"
@@ -879,199 +901,6 @@ export const OwnerContainers: React.FC = () => {
                 </div>
               </div>
 
-              {/* SECTION 2: SCAN PRODUCTS (OPENCV CONTINUOUS BARCODE SCANNER) */}
-              <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
-                    <span>2. Scan Products</span>
-                  </h4>
-
-                  {/* Live Capacity Utilized Bar */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono font-bold text-slate-300">
-                      Utilized: {currentUtilizedCapacity.toFixed(1)} / {maxCapacity} {capacityUnit} ({utilizedPercent}%)
-                    </span>
-                  </div>
-                </div>
-
-                {/* Capacity Progress Bar */}
-                <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-300 ${
-                      utilizedPercent >= 100
-                        ? 'bg-rose-500'
-                        : utilizedPercent > 80
-                        ? 'bg-amber-400'
-                        : 'bg-indigo-500'
-                    }`}
-                    style={{ width: `${utilizedPercent}%` }}
-                  />
-                </div>
-
-                {/* Capacity Validation Error Banner */}
-                {capacityError && (
-                  <div className="p-3 bg-rose-950/80 border border-rose-800 rounded-xl text-xs text-rose-300 flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                    <span>{capacityError}</span>
-                  </div>
-                )}
-
-                {/* The OpenCV Barcode Scanner Component */}
-                <OpenCvBarcodeScanner
-                  onScan={handleBarcodeScan}
-                  isScanning={isScanning}
-                  onToggleScanning={setIsScanning}
-                  simulationProducts={simulationProducts}
-                />
-
-                {/* Scanned Products List Table (With "remove in UI please :>") */}
-                <div className="space-y-3 pt-3 border-t border-slate-800">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                      <Package className="w-4 h-4 text-indigo-400" />
-                      <span>Scanned Products List ({scannedItems.length} lines • {currentTotalUnits} units)</span>
-                    </div>
-
-                    {scannedItems.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setScannedItems([])}
-                        className="text-xs text-rose-400 hover:text-rose-300 font-semibold cursor-pointer"
-                      >
-                        Clear All
-                      </button>
-                    )}
-                  </div>
-
-                  {scannedItems.length === 0 ? (
-                    <div className="p-6 text-center rounded-xl border border-dashed border-slate-800 bg-slate-900/40 text-slate-400 text-xs">
-                      No products scanned yet. Point your camera at product barcodes above or enter barcode numbers.
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/60">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800 font-bold">
-                          <tr>
-                            <th className="px-3.5 py-2.5">Product Name</th>
-                            <th className="px-3.5 py-2.5">SKU / Barcode</th>
-                            <th className="px-3.5 py-2.5 text-center">Quantity</th>
-                            <th className="px-3.5 py-2.5 text-right">Weight ({capacityUnit})</th>
-                            <th className="px-3.5 py-2.5 text-center">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800">
-                          {scannedItems.map(item => (
-                            <tr key={item.productId} className="hover:bg-slate-800/40 transition">
-                              <td className="px-3.5 py-2.5 font-bold text-white">
-                                {item.productName}
-                              </td>
-                              <td className="px-3.5 py-2.5 font-mono text-slate-400 text-[11px]">
-                                {item.sku}
-                                <span className="block text-[10px] text-slate-500 font-mono">
-                                  {item.barcode}
-                                </span>
-                              </td>
-                              <td className="px-3.5 py-2.5">
-                                <div className="flex items-center justify-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAdjustQuantity(item.productId, -1)}
-                                    className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition cursor-pointer"
-                                    title="Decrease quantity"
-                                  >
-                                    -
-                                  </button>
-                                  <span className="font-mono font-bold text-white min-w-[20px] text-center">
-                                    {item.quantity}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAdjustQuantity(item.productId, 1)}
-                                    className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition cursor-pointer"
-                                    title="Increase quantity"
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              </td>
-                              <td className="px-3.5 py-2.5 text-right font-mono font-bold text-white">
-                                {item.totalWeight.toFixed(1)} {capacityUnit}
-                                <span className="block text-[10px] text-slate-500 font-normal">
-                                  {item.unitWeight} {capacityUnit}/ea
-                                </span>
-                              </td>
-                              {/* Remove in UI Action button ("remove in UI please :>") */}
-                              <td className="px-3.5 py-2.5 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveScannedItem(item.productId)}
-                                  className="p-1.5 rounded-lg text-rose-400 hover:text-white hover:bg-rose-950/80 border border-transparent hover:border-rose-800 transition cursor-pointer"
-                                  title="Remove product from container"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* SECTION 3: SYSTEM-GENERATED FIELDS */}
-              <div className="bg-slate-950/80 p-5 rounded-2xl border border-slate-800 space-y-3">
-                <h4 className="text-xs sm:text-sm font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
-                  <Info className="w-4 h-4 text-indigo-400" />
-                  <span>3. System-Generated Fields</span>
-                </h4>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10.5px] text-slate-400 font-medium block">Container ID</span>
-                    <span className="font-mono font-bold text-indigo-400">
-                      Auto-generated
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10.5px] text-slate-400 font-medium block">Status</span>
-                    <span className="font-bold text-emerald-400">
-                      Active
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10.5px] text-slate-400 font-medium block">Utilized Capacity</span>
-                    <span className="font-mono font-bold text-white">
-                      {currentUtilizedCapacity.toFixed(1)} {capacityUnit}
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10.5px] text-slate-400 font-medium block">Assigned Shipment</span>
-                    <span className="font-mono font-semibold text-slate-300">
-                      Unassigned
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10.5px] text-slate-400 font-medium block">Created At</span>
-                    <span className="font-semibold text-slate-300">
-                      Automatic (Current Time)
-                    </span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10.5px] text-slate-400 font-medium block">Created By</span>
-                    <span className="font-bold text-white truncate block">
-                      {user?.name || 'Dhruva (Owner)'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
               {/* Bottom Actions */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
@@ -1083,10 +912,20 @@ export const OwnerContainers: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-600/30 transition cursor-pointer flex items-center gap-2"
+                  disabled={isCreatingContainer}
+                  className="px-6 py-2.5 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl shadow-lg shadow-indigo-600/30 transition cursor-pointer flex items-center gap-2"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Create & Initialize Container</span>
+                  {isCreatingContainer ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Initializing Container...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Create & Initialize Container</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -1375,6 +1214,73 @@ export const OwnerContainers: React.FC = () => {
                     onToggleScanning={setIsContainerScanning}
                     simulationProducts={simulationProducts}
                   />
+                </div>
+
+                {/* 2.5 Manual Barcode Scanner & "Add Code" Button */}
+                <div className="bg-slate-950/70 p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="manual-barcode-input" className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                      <Scan className="w-4 h-4 text-indigo-400" />
+                      <span>Barcode Scanner API / Manual Code Entry</span>
+                    </label>
+                    {scanApiSuccess && (
+                      <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5 animate-in fade-in">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>{scanApiSuccess}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (barcodeInput.trim()) {
+                        addBarcode(scanModalContainer.containerNumber, barcodeInput.trim());
+                      }
+                    }}
+                    className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+                  >
+                    <div className="relative flex-1">
+                      <input
+                        id="manual-barcode-input"
+                        type="text"
+                        value={barcodeInput}
+                        onChange={(e) => setBarcodeInput(e.target.value)}
+                        placeholder="Scan or enter product barcode e.g. 8901063139374..."
+                        className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-hidden transition shadow-inner"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isScanningApi || !barcodeInput.trim()}
+                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-indigo-600/30"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{isScanningApi ? 'Scanning...' : 'Add Code'}</span>
+                    </button>
+                  </form>
+
+                  {/* Quick-test barcode presets from product master */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-400">
+                    <span className="text-slate-500 font-semibold">Quick Test Barcodes:</span>
+                    <button
+                      type="button"
+                      onClick={() => addBarcode(scanModalContainer.containerNumber, '8901063139374')}
+                      className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500 text-indigo-300 font-mono transition cursor-pointer"
+                      title="Scan Copper Wire (8901063139374)"
+                    >
+                      8901063139374 (Copper Wire)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addBarcode(scanModalContainer.containerNumber, '8901063139375')}
+                      className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500 text-indigo-300 font-mono transition cursor-pointer"
+                      title="Scan Switch (8901063139375)"
+                    >
+                      8901063139375 (Switch)
+                    </button>
+                  </div>
                 </div>
 
                 {/* 3. Loaded Products in this Container (with "remove in UI please :>") */}

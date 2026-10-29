@@ -101,6 +101,10 @@ def root():
 
 @app.get("/api/seed", tags=["Root"], summary="One-click Database Seeder")
 @app.post("/api/seed", tags=["Root"], summary="One-click Database Seeder")
+@app.get("/seed", tags=["Root"], summary="One-click Database Seeder")
+@app.post("/seed", tags=["Root"], summary="One-click Database Seeder")
+@app.get("/api/v1/seed", tags=["Root"], summary="One-click Database Seeder")
+@app.post("/api/v1/seed", tags=["Root"], summary="One-click Database Seeder")
 def trigger_seed():
     """Seeds or refreshes demo catalog, containers, users, and shipments."""
     try:

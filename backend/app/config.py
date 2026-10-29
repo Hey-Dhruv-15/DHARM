@@ -7,9 +7,13 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "DHARM Intelligent Logistics ERP"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api"
-    DEBUG: bool = True
+    DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
 
-    # Database
+    # Host & Port (defaults to 0.0.0.0 so Render, Docker, and local run reliably)
+    HOST: str = os.getenv("HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", "8000"))
+
+    # Database (supports Render postgres:// and standard postgresql://)
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
         "postgresql://postgres:postgres@localhost:5432/dharm_db"
@@ -24,9 +28,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
     # CORS
-    CORS_ORIGINS: str = (
+    CORS_ORIGINS: str = os.getenv(
+        "CORS_ORIGINS",
         "http://localhost:5173,http://localhost:5174,http://localhost:4173,http://localhost:3000,"
-        "http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:4173,http://127.0.0.1:3000"
+        "http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:4173,http://127.0.0.1:3000,*"
     )
 
     @property

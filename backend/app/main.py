@@ -62,10 +62,18 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-# CORS Middleware configuration
+# CORS Middleware configuration (Supports Vercel & Render origins with credentials)
+cors_origins = [o for o in settings.cors_origin_list if o != "*"]
+if not cors_origins:
+    cors_origins = [
+        "http://localhost:5173", "http://localhost:5174", "http://localhost:4173", "http://localhost:3000",
+        "http://127.0.0.1:5173", "http://127.0.0.1:5174", "http://127.0.0.1:4173", "http://127.0.0.1:3000"
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origin_list if settings.cors_origin_list else ["*"],
+    allow_origins=cors_origins,
+    allow_origin_regex=r"^https://.*\.vercel\.app$|^https://.*\.onrender\.com$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

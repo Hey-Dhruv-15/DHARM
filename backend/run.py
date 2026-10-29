@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import argparse
 import uvicorn
 
@@ -19,11 +19,15 @@ from app.seed import seed_database
 
 
 def main():
+    default_host = getattr(settings, "HOST", "0.0.0.0")
+    default_port = getattr(settings, "PORT", 8000)
+    default_debug = getattr(settings, "DEBUG", True)
+
     parser = argparse.ArgumentParser(description="Run DHARM FastAPI Backend")
     parser.add_argument("--seed", action="store_true", help="Seed the database with initial demo data before starting")
-    parser.add_argument("--host", type=str, default=settings.HOST, help="Host to bind server to")
-    parser.add_argument("--port", type=int, default=settings.PORT, help="Port to run server on")
-    parser.add_argument("--reload", action="store_true", default=settings.DEBUG, help="Enable auto-reload on code change")
+    parser.add_argument("--host", type=str, default=default_host, help="Host to bind server to")
+    parser.add_argument("--port", type=int, default=default_port, help="Port to run server on")
+    parser.add_argument("--reload", action="store_true", default=default_debug, help="Enable auto-reload on code change")
 
     args = parser.parse_args()
 

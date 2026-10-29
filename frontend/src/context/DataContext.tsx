@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from '../services/apiConfig';
 ﻿import React, { createContext, useContext, useState, useEffect } from 'react';
 import type {
   Product,
@@ -335,7 +336,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
       .catch(err => console.debug('Notice fetching products from API:', err));
 
-    fetch('http://localhost:8000/api/returns')
+    fetch(`${getApiBaseUrl()}/api/returns`)
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
@@ -379,7 +380,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .catch(err => console.debug('Notice fetching returns from API:', err));
 
     // Sync live shipments from backend REST API (GET /api/shipments)
-    fetch('http://localhost:8000/api/shipments')
+    fetch(`${getApiBaseUrl()}/api/shipments`)
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
@@ -432,7 +433,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
       .catch(err => console.debug('Notice fetching shipments from API:', err));
 
-    fetch('http://localhost:8000/api/discrepancies')
+    fetch(`${getApiBaseUrl()}/api/discrepancies`)
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
@@ -1145,7 +1146,7 @@ const refreshShipments = async () => {
 
     // Sync with FastAPI backend POST /api/discrepancies/report
     try {
-      fetch('http://localhost:8000/api/discrepancies/report', {
+      fetch(`${getApiBaseUrl()}/api/discrepancies/report`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1222,7 +1223,7 @@ const refreshShipments = async () => {
     logAudit(actorName, role, 'DISCREPANCY_STATUS_CHANGED', 'Discrepancy', id, `Updated discrepancy to status: ${status}. Outcome: ${outcome || 'In Progress'}`);
 
     try {
-      fetch(`http://localhost:8000/api/discrepancies/${id}`, {
+      fetch(`${getApiBaseUrl()}/api/discrepancies/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1345,7 +1346,7 @@ const refreshShipments = async () => {
 
     // 3. Sync seamlessly with FastAPI backend POST /api/returns/claim
     try {
-      fetch('http://localhost:8000/api/returns/claim', {
+      fetch(`${getApiBaseUrl()}/api/returns/claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1516,7 +1517,7 @@ const refreshShipments = async () => {
 
     // Sync seamlessly with FastAPI backend
     try {
-      fetch('http://localhost:8000/api/orders', {
+      fetch(`${getApiBaseUrl()}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1637,7 +1638,7 @@ const refreshShipments = async () => {
       if (status === 'Delivered') {
         // Sync delivery & archival with FastAPI backend
         try {
-          fetch(`http://localhost:8000/api/orders/${orderId}/deliver`, {
+          fetch(`${getApiBaseUrl()}/api/orders/${orderId}/deliver`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1666,7 +1667,7 @@ const refreshShipments = async () => {
       } else {
         // Sync other status updates
         try {
-          fetch(`http://localhost:8000/api/orders/${orderId}/status`, {
+          fetch(`${getApiBaseUrl()}/api/orders/${orderId}/status`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status })
@@ -1800,7 +1801,7 @@ const refreshShipments = async () => {
 
     // Sync with FastAPI backend Exceptions & Damaged intake
     try {
-      fetch(`http://localhost:8000/api/orders/${input.orderId || 'ord'}/report-problem`, {
+      fetch(`${getApiBaseUrl()}/api/orders/${input.orderId || 'ord'}/report-problem`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1935,7 +1936,7 @@ const refreshShipments = async () => {
     logAudit(actorName, 'VENDOR', 'RETURN_INSPECTED', 'Return', id, `Vendor verified defect for return ${id}: ${diagnosis}. Quarantined at ${quarantineLoc}`);
 
     try {
-      fetch(`http://localhost:8000/api/returns/${id}/verify`, {
+      fetch(`${getApiBaseUrl()}/api/returns/${id}/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1986,7 +1987,7 @@ const refreshShipments = async () => {
     logAudit(actorName, 'VENDOR', 'RETURN_RESOLVED', 'Return', id, `Processed customer resolution choice (${resolution}) for return ${id}`);
 
     try {
-      fetch(`http://localhost:8000/api/returns/${id}/resolve`, {
+      fetch(`${getApiBaseUrl()}/api/returns/${id}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,12 +1,7 @@
 import type { Container } from '../types';
 
-const getBaseUrl = (): string => {
-  if (typeof window !== 'undefined') {
-    if (window.location.port === '8000') return '';
-    return 'http://localhost:8000';
-  }
-  return 'http://localhost:8000';
-};
+import { getApiBaseUrl } from './apiConfig';
+const getBaseUrl = getApiBaseUrl;
 
 const getAuthHeaders = (): HeadersInit => {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('dharm_access_token') : null;

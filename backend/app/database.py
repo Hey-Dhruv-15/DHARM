@@ -7,8 +7,10 @@ logger = logging.getLogger("dharm.database")
 
 
 def get_engine(db_url: str):
-    # Normalize postgresql:// to postgresql+psycopg2:// for SQLAlchemy 2.0+
-    if db_url.startswith("postgresql://"):
+    # Normalize postgres:// and postgresql:// to postgresql+psycopg2:// for SQLAlchemy 2.0+ (Render Postgres compatibility)
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
     if db_url.startswith("sqlite"):

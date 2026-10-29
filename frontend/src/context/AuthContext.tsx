@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from '../services/apiConfig';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User, UserRole } from '../types';
 import { DEMO_CREDENTIALS } from '../data/mockData';
@@ -43,7 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const endpoints = [
         '/api/auth/login',
-        'http://localhost:8000/api/auth/login',
+        `${getApiBaseUrl()}/api/auth/login`,
         'http://127.0.0.1:8000/api/auth/login'
       ];
 

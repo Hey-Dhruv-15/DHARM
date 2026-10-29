@@ -12,57 +12,95 @@
 
 ---
 
+## 👥 Login Credentials & User Roles
+
+All accounts are pre-seeded in the database and mock system. Default password across all roles is **`Dharam@123`**.
+
+| Role | User Name | Login Email | Password | Primary Capabilities & Scope |
+|---|---|---|---|---|
+| **Product Owner** | Dhruva (Owner) | `hey.dhruvs20@gmail.com` | `Dharam@123` | Master product catalog, SKU barcodes, container sealing, dispatch manifests, vendor scorecard, and discrepancy resolution. |
+| **Vendor Hub** | Sinu Gunshetty | `sinugunshetty@gmail.com` | `Dharam@123` | Cross-dock inbound receipts, barcode/QR verification scanner, physical shortage/product loss reporting, and outgoing handover. |
+| **Vendor Hub (Alt)** | Sinu Gunshetty | `sinu.vendor@dharm.com` | `Dharam@123` | Secondary vendor testing account with full hub access. |
+| **Customer** | Anusha S | `anusha.s2028@gmail.com` | `Dharam@123` | Purchase order placement, real-time shipment tracking, cryptographic delivery confirmation, return claims, and issue reporting. |
+| **Customer (Alt)** | Anusha S (BioMed) | `anusha.biomed@dharm.com` | `Dharam@123` | BioMed Research corporate institutional account. |
+
+---
+
 ## 🚀 Key Features
 
 - **Products & SKU Master Catalog**: Real-time pricing with GST calculation, billing units, serial barcodes, and scope deliverables.
-- **Role-Based Perspectives**:
-  - **Product Owner** (`hey.dhruvs20@gmail.com`): Master inventory, dispatch manifests, vendor custody scorecards, and discrepancy escalations.
-  - **Vendor Hub** (`Sinugunshetty@gmail.com`): Cross-dock receiving, item verification scanner, and outgoing dispatch.
-  - **Customer Portal** (`anusha.s2028@gmail.com`): Real-time delivery tracking, cryptographic delivery confirmation, and instant return requests.
-- **Tamper-Evident Security**: Barcode, QR, and container security seal tracking for zero unaccounted loss.
-- **Discrepancy Engine**: Automatic detection for missing items, duplicate scans, damaged goods, or wrong containers with resolution workflows.
+- **Tamper-Evident Security**: Barcode, QR, and container security seal tracking (Cold-Chain Bins, Security Crates, RFID Pallets) for zero unaccounted loss.
+- **Automated Discrepancy & Product Loss Engine**: Automatic detection for shortages, unmanifested barcodes, duplicate scans, or wrong containers with resolution workflows.
+- **Shipment Lifecycle & Reconciliation**: Complete flow from Owner Draft ➔ Sealing ➔ Dispatched ➔ In Transit ➔ Vendor Physical Verification ➔ Delivered / Discrepancy Detected.
 
 ---
 
 ## 🛠 Tech Stack
 
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS
-- **Icons & Visuals**: Lucide React, Recharts
-- **State & Storage**: React Context API with LocalStorage caching & audit logging
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, Lucide Icons
+- **Backend API**: FastAPI, SQLAlchemy 2.0, Pydantic v2, PostgreSQL / SQLite
+- **Security**: JWT Bearer Tokens, Bcrypt password hashing, SHA-256 Manifest signatures
+- **Deployment**: Render (Backend Web Service & Database) + Vercel (Frontend SPA)
 
 ---
 
-## 💻 Getting Started
+## 💻 Local Development
 
 ### Prerequisites
 - Node.js (v18+)
-- npm or yarn
+- Python (v3.10+)
 
-### Installation & Run
-
+### 1. Run the Backend API
 ```bash
-# Clone the repository
-git clone https://github.com/Hey-Dhruv-15/DHARM.git
+cd backend
+python -m venv venv
+# Windows:
+.\venv\Scripts\Activate.ps1
+# Mac/Linux:
+source venv/bin/activate
 
-# Navigate to frontend directory
-cd DHARM/frontend
+pip install -r requirements.txt
+python run.py --seed
+```
+*API runs at `http://127.0.0.1:8000` with Swagger docs at `http://127.0.0.1:8000/docs`.*
 
-# Install dependencies
+### 2. Run the Frontend
+```bash
+cd frontend
 npm install
-
-# Start development server
 npm run dev
 ```
+*Frontend runs at `http://localhost:5173`.*
 
 ---
 
-## 👥 Demo Credentials
+## 🌐 Production Deployment Guide
 
-| Role | Email | Password |
-|---|---|---|
-| **Product Owner** | `hey.dhruvs20@gmail.com` | `Dharam@123` |
-| **Vendor Hub** | `Sinugunshetty@gmail.com` | `Dharam@123` |
-| **Customer** | `anusha.s2028@gmail.com` | `Dharam@123` |
+### A. Deploy Backend to Render (Web Service)
+1. In the [Render Dashboard](https://dashboard.render.com), click **New** ➔ **Web Service**.
+2. Connect your GitHub repository `Hey-Dhruv-15/DHARM`.
+3. Configure settings:
+   - **Root Directory**: `backend`
+   - **Runtime**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+4. Environment Variables:
+   - `PYTHON_VERSION`: `3.12.8`
+   - `CORS_ORIGINS`: `*`
+   - `SECRET_KEY`: `dharm-super-secret-key-change-in-production-2026-secure-jwt-token`
+5. Click **Deploy Web Service**. Render provides your API URL: `https://dharm-backend.onrender.com`.
+
+### B. Deploy Frontend to Vercel
+1. In the [Vercel Dashboard](https://vercel.com), click **Add New...** ➔ **Project**.
+2. Select your repository `Hey-Dhruv-15/DHARM`.
+3. Configure settings:
+   - **Root Directory**: `frontend`
+   - **Framework Preset**: `Vite`
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+4. Add Environment Variable:
+   - **`VITE_API_URL`**: `https://dharm-backend.onrender.com` *(your Render backend URL)*
+5. Click **Deploy**. Vercel will build and launch your production application.
 
 ---
 

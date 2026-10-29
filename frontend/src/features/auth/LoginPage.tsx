@@ -8,8 +8,8 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [email, setEmail] = useState('hey.dhruvs20@gmail.com');
-  const [password, setPassword] = useState('Dharam@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -139,17 +139,7 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Subtext below button matching screenshot */}
-          <div className="mt-6 text-center text-xs text-slate-500">
-            Don't have an account?{' '}
-            <button
-              type="button"
-              onClick={() => alert('Demo Accounts:\n\n• Owner: hey.dhruvs20@gmail.com\n• Vendor: Sinugunshetty@gmail.com\n• Customer: anusha.s2028@gmail.com\nPassword: Dharam@123')}
-              className="font-semibold text-[#5c4cf6] hover:underline cursor-pointer"
-            >
-              Join DHARM
-            </button>
-          </div>
+
         </div>
 
         {/* Clean Bottom Spacer */}

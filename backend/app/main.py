@@ -19,15 +19,21 @@ logger = logging.getLogger("dharm")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Ensure database tables are created
+    # Startup: Ensure database tables and initial demo seeds exist
     logger.info("Starting up DHARM Backend API...")
     try:
         init_db()
         logger.info("Database initialized successfully.")
+        try:
+            from app.seed import seed_database
+            seed_database()
+            logger.info("Demo data auto-seeded successfully.")
+        except Exception as seed_err:
+            logger.warning(f"Auto-seed notice: {seed_err}")
     except Exception as e:
         logger.warning(
-            f"Could not connect to PostgreSQL on startup ({e}). "
-            "Please ensure your PostgreSQL server is running at the configured DATABASE_URL."
+            f"Could not connect to database on startup ({e}). "
+            "Please ensure your database is running at the configured DATABASE_URL."
         )
     yield
     # Shutdown
@@ -48,13 +54,11 @@ app = FastAPI(
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     errors = []
     for err in exc.errors():
-        msg = err.get("msg", "")
-        if msg.startswith("Value error, "):
-            msg = msg.replace("Value error, ", "", 1)
+        field = " -> ".join(str(loc) for loc in err["loc"] if loc != "body")
         errors.append({
-            "loc": list(err.get("loc", [])),
-            "msg": msg,
-            "type": err.get("type")
+            "field": field or "body",
+            "message": err["msg"],
+            "type": err["type"]
         })
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -91,8 +95,23 @@ def root():
         "message": "Welcome to the DHARM Logistics & Product Traceability ERP API",
         "documentation": "/docs",
         "health": f"{settings.API_V1_STR}/health",
-        "version": settings.VERSION
+        "status": "online"
     }
 
-# Container Barcode Scanning API verified
 
+@app.get("/api/seed", tags=["Root"], summary="One-click Database Seeder")
+@app.post("/api/seed", tags=["Root"], summary="One-click Database Seeder")
+def trigger_seed():
+    """Seeds or refreshes demo catalog, containers, users, and shipments."""
+    try:
+        from app.seed import seed_database
+        seed_database()
+        return {
+            "success": True,
+            "message": "Database tables and demo seed records verified/created successfully!"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }

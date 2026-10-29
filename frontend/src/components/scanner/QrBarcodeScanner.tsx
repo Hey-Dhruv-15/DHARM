@@ -35,7 +35,8 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
     shipments,
     containers,
     products,
-    processScan
+    processScan,
+    reconcileShipmentReceiving
   } = useData();
 
   // State
@@ -210,8 +211,11 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
     }
   };
 
-  const handleProceedToNextScreen = () => {
+  const handleProceedToNextScreen = async () => {
     setCompleteModalOpen(false);
+    if (totalVerified < totalExpected) {
+      await reconcileShipmentReceiving(selectedShipmentId, user?.name || 'Vendor Operator', role || 'VENDOR');
+    }
     if (onFinishVerification) {
       onFinishVerification(selectedShipmentId);
       return;
@@ -670,19 +674,35 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
         maxWidth="md"
       >
         <div className="space-y-4">
-          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-              <CheckCircle2 className="w-6 h-6" />
+          {totalVerified < totalExpected ? (
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-rose-950">
+                  Discrepancy Alert: Product Loss / Shortage Detected!
+                </h4>
+                <p className="text-xs text-rose-800 mt-1">
+                  Physical count ({totalVerified} units) is short of the manifest expectation ({totalExpected} units). {totalExpected - totalVerified} units missing / lost! A shortage discrepancy has been logged and the Owner has been notified.
+                </p>
+              </div>
             </div>
-            <div>
-              <h4 className="text-sm font-bold text-emerald-950">
-                Successfully Matched the Products!
-              </h4>
-              <p className="text-xs text-emerald-800 mt-1">
-                All physical line items match the manifest specifications with {matchRate}% accuracy. Verified units have been recorded and reconciled against immutable chain custody.
-              </p>
+          ) : (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-emerald-950">
+                  Successfully Matched the Products!
+                </h4>
+                <p className="text-xs text-emerald-800 mt-1">
+                  All physical line items match the manifest specifications with {matchRate}% accuracy. Verified units have been recorded and reconciled against immutable chain custody.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
@@ -710,9 +730,13 @@ export const QrBarcodeScanner: React.FC<QrBarcodeScannerProps> = ({
             <button
               type="button"
               onClick={handleProceedToNextScreen}
-              className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5"
+              className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5 ${
+                totalVerified < totalExpected
+                  ? 'bg-rose-600 hover:bg-rose-700'
+                  : 'bg-emerald-600 hover:bg-emerald-700'
+              }`}
             >
-              <span>Proceed to Next Screen</span>
+              <span>{totalVerified < totalExpected ? 'Proceed & Flag Product Loss' : 'Proceed to Next Screen'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

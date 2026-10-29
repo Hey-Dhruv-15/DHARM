@@ -4,6 +4,7 @@ import type {
   Container,
   ContainerType,
   Shipment,
+  ShipmentStatus,
   DiscrepancyCase,
   DiscrepancyType,
   ReturnCase,
@@ -26,6 +27,7 @@ import {
 } from '../services/customerApi';
 import { productApi } from '../services/productApi';
 import { orderApi } from '../services/orderApi';
+import * as shipmentApi from '../services/shipmentApi';
 import {
   INITIAL_PRODUCTS,
   INITIAL_CONTAINERS,
@@ -97,6 +99,13 @@ interface DataContextType {
 
   // Customer Portal Actions
   refreshOrders: () => Promise<void>;
+  refreshShipments: () => Promise<void>;
+  reconcileShipmentReceiving: (
+    shipmentId: string,
+    actorName?: string,
+    role?: UserRole,
+    checkpointLocation?: string
+  ) => Promise<{ hasDiscrepancy: boolean; missingUnits: number; discrepancyCount: number }>;
   placeCustomerOrder: (
     orderData: {
       items: Array<{
@@ -730,6 +739,133 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logAudit(actorName, role, 'SHIPMENT_DISPATCHED', 'Shipment', shipmentId, `Shipment dispatched to carrier with immutable manifest.`);
     }
     return success;
+  };
+
+
+const refreshShipments = async () => {
+    try {
+      const res = await shipmentApi.listShipments({ limit: 50 });
+      if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+        setShipments(prev => {
+          const apiMap = new Map(res.data.map(item => [item.shipment_id, item]));
+          return prev.map(s => {
+            const apiItem = apiMap.get(s.id) || apiMap.get(s.trackingNumber);
+            if (apiItem) {
+              const apiStatus = apiItem.status.toLowerCase();
+              let formattedStatus = s.status;
+              if (apiStatus === 'discrepancy') formattedStatus = 'Discrepancy Detected';
+              else if (apiStatus === 'in_transit') formattedStatus = 'In Transit';
+              else if (apiStatus === 'dispatched') formattedStatus = 'Dispatched';
+              else if (apiStatus === 'delivered' || apiStatus === 'reconciled') formattedStatus = 'Delivered';
+              return { ...s, status: formattedStatus };
+            }
+            return s;
+          });
+        });
+      }
+    } catch (err) {
+      console.debug('Notice refreshing shipments from API:', err);
+    }
+  };
+
+  const reconcileShipmentReceiving = async (
+    shipmentId: string,
+    actorName: string = 'Vendor Operator',
+    role: UserRole = 'VENDOR',
+    checkpointLocation: string = 'Vendor Receiving Dock'
+  ): Promise<{ hasDiscrepancy: boolean; missingUnits: number; discrepancyCount: number }> => {
+    const targetShipment = shipments.find(s => s.id === shipmentId);
+    if (!targetShipment) return { hasDiscrepancy: false, missingUnits: 0, discrepancyCount: 0 };
+
+    let totalExpected = 0;
+    let totalVerified = 0;
+    let missingUnits = 0;
+    const now = new Date().toISOString();
+    const createdDiscrepancies: DiscrepancyCase[] = [];
+
+    const updatedItems = targetShipment.items.map(item => {
+      const exp = item.expectedQuantity;
+      const ver = item.verifiedQuantity || 0;
+      totalExpected += exp;
+      totalVerified += ver;
+      const shortage = exp - ver;
+
+      if (shortage > 0) {
+        missingUnits += shortage;
+        const discNum = `DIS-2026-${Math.floor(100 + Math.random() * 900)}`;
+        const newCase: DiscrepancyCase = {
+          id: `disc-${Date.now()}-${item.sku}`,
+          discrepancyNumber: discNum,
+          shipmentId: targetShipment.id,
+          shipmentTracking: targetShipment.trackingNumber,
+          containerId: item.containerId || targetShipment.containerIds[0] || 'CNT-ALPHA-881',
+          containerNumber: item.containerNumber || 'CNT-ALPHA-881',
+          productId: item.productId,
+          productName: item.productName,
+          sku: item.sku,
+          type: 'Missing Item',
+          severity: shortage >= 5 ? 'High' : 'Medium',
+          status: 'Detected',
+          expectedQuantity: exp,
+          observedQuantity: ver,
+          detectionStage: 'Vendor Receiving',
+          evidence: [],
+          resolutionNotes: `Vendor physical verification identified product loss / shortage: ${shortage} units missing.`,
+          detectedBy: actorName,
+          detectedAt: now,
+          updatedAt: now
+        };
+        createdDiscrepancies.push(newCase);
+        return { ...item, status: 'Mismatch' as const };
+      } else if (ver > exp) {
+        return { ...item, status: 'Mismatch' as const };
+      }
+      return { ...item, status: 'Verified' as const };
+    });
+
+    const hasDiscrepancy = missingUnits > 0;
+    const nextStatus: ShipmentStatus = hasDiscrepancy ? 'Discrepancy Detected' : 'Delivered';
+
+    setShipments(prev =>
+      prev.map(s => {
+        if (s.id !== shipmentId) return s;
+        return {
+          ...s,
+          status: nextStatus,
+          items: updatedItems,
+          events: [
+            ...s.events,
+            {
+              id: `ev-${Date.now()}`,
+              timestamp: now,
+              status: nextStatus,
+              location: checkpointLocation,
+              performedBy: actorName,
+              notes: hasDiscrepancy
+                ? `Vendor completed receiving with product loss: ${missingUnits} units missing across ${createdDiscrepancies.length} SKU lines.`
+                : 'Vendor completed receiving and physical verification: all units reconciled.'
+            }
+          ]
+        };
+      })
+    );
+
+    if (createdDiscrepancies.length > 0) {
+      setDiscrepancies(prev => [...createdDiscrepancies, ...prev]);
+    }
+
+    try {
+      await shipmentApi.completeReceivingAndReconcile(targetShipment.id, {
+        container_id: targetShipment.containerIds[0] || 'CNT-ALPHA-881',
+        confirmation: true,
+        checkpoint_location: checkpointLocation,
+        notes: hasDiscrepancy ? `Shortage of ${missingUnits} units reported during receiving.` : 'Clean receiving.'
+      });
+    } catch (e) {
+      console.warn('Backend completeReceivingAndReconcile notice:', e);
+    }
+
+    return { hasDiscrepancy, missingUnits, discrepancyCount: createdDiscrepancies.length };
   };
 
   const receiveShipment = (shipmentId: string, actorName: string, role: UserRole): boolean => {
@@ -1906,6 +2042,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         customerProfile,
         notifications,
         refreshOrders,
+        refreshShipments,
+        reconcileShipmentReceiving,
         placeCustomerOrder,
         updateOrderStatus,
         cancelCustomerOrder,

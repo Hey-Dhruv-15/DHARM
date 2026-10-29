@@ -28,7 +28,8 @@ import {
   MoreVertical,
   MoreHorizontal
 } from 'lucide-react';
-import type { Shipment, ShipmentItem, ShipmentStatus } from '../../types';
+import type { Shipment, ShipmentItem, ShipmentStatus, DiscrepancyStatus } from '../../types';
+import * as shipmentApi from '../../services/shipmentApi';
 
 export const OwnerShipments: React.FC = () => {
   const {
@@ -37,7 +38,10 @@ export const OwnerShipments: React.FC = () => {
     containers,
     createShipment,
     updateShipment,
-    dispatchShipment
+    dispatchShipment,
+    refreshShipments,
+    reconcileShipmentReceiving,
+    updateDiscrepancyStatus
   } = useData();
   const { user, role } = useAuth();
 
@@ -51,6 +55,69 @@ export const OwnerShipments: React.FC = () => {
   const [editingShipment, setEditingShipment] = useState<Shipment | null>(null);
   const [fulfillmentShipment, setFulfillmentShipment] = useState<Shipment | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  // Backend Reconciliation & Resolution State
+  const [reconciliationReport, setReconciliationReport] = useState<shipmentApi.ReconciliationResponse['data'] | null>(null);
+  const [reconciliationLoading, setReconciliationLoading] = useState(false);
+  const [resolveShipment, setResolveShipment] = useState<Shipment | null>(null);
+  const [resolutionStatus, setResolutionStatus] = useState<DiscrepancyStatus>('Resolved');
+  const [resolutionType, setResolutionType] = useState('Inventory Adjusted');
+  const [resolutionNotes, setResolutionNotes] = useState('Inventory adjusted following vendor reconciliation.');
+  const [isSubmittingResolution, setIsSubmittingResolution] = useState(false);
+
+  // Sync shipments from backend on mount
+  React.useEffect(() => {
+    refreshShipments();
+  }, []);
+
+  const openDetailsWithReconciliation = (shipment: Shipment) => {
+    setDetailsShipment(shipment);
+    setReconciliationLoading(true);
+    setReconciliationReport(null);
+    shipmentApi.getReconciliationDetails(shipment.id)
+      .then(res => {
+        if (res && res.success) setReconciliationReport(res.data);
+      })
+      .catch(() => setReconciliationReport(null))
+      .finally(() => setReconciliationLoading(false));
+  };
+
+  const handleResolveDiscrepancySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resolveShipment) return;
+    setIsSubmittingResolution(true);
+    try {
+      await shipmentApi.resolveShipmentDiscrepancy(resolveShipment.id, 'DSP-2026-001', {
+        resolution_status: resolutionStatus,
+        resolution_type: resolutionType,
+        notes: resolutionNotes
+      });
+    } catch (err) {
+      console.warn('API discrepancy resolution notice:', err);
+    }
+    // Update local shipment status to Reconciled / Delivered
+    updateShipment(
+      resolveShipment.id,
+      {
+        status: 'Delivered',
+        events: [
+          ...resolveShipment.events,
+          {
+            id: `ev-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            status: 'Delivered',
+            location: resolveShipment.destination,
+            performedBy: user?.name || 'Dhruva (Owner)',
+            notes: `Discrepancy resolved (${resolutionType}). Resolution notes: ${resolutionNotes}`
+          }
+        ]
+      },
+      user?.name || 'Dhruva (Owner)',
+      role || 'OWNER'
+    );
+    setIsSubmittingResolution(false);
+    setResolveShipment(null);
+  };
+
 
   // New Shipment Form State
   const [origin, setOrigin] = useState('Central Depot (Hub Alpha)');
@@ -119,15 +186,19 @@ export const OwnerShipments: React.FC = () => {
       s.customerName.toLowerCase().includes(q) ||
       s.items.some(i => i.containerNumber.toLowerCase().includes(q) || i.productName.toLowerCase().includes(q));
 
+    const totalExp = s.items.reduce((acc, i) => acc + i.expectedQuantity, 0);
+    const totalVer = s.items.reduce((acc, i) => acc + (i.verifiedQuantity || 0), 0);
+    const hasProductLoss = totalVer < totalExp && s.status !== 'Draft' && s.status !== 'Ready for Dispatch';
+
     let matchStatus = true;
     if (statusFilter === 'All') {
       matchStatus = true;
     } else if (statusFilter === 'Discrepancy') {
-      matchStatus = s.status === 'Discrepancy Detected';
+      matchStatus = s.status === 'Discrepancy Detected' || (s.status as string) === 'Discrepancy' || hasProductLoss;
     } else if (statusFilter === 'In Transit') {
       matchStatus = s.status === 'In Transit' || s.status === 'Dispatched';
     } else if (statusFilter === 'Delivered') {
-      matchStatus = s.status === 'Delivered' || s.status === 'Received';
+      matchStatus = (s.status === 'Delivered' || s.status === 'Received') && !hasProductLoss;
     } else if (statusFilter === 'Draft') {
       matchStatus = s.status === 'Draft' || s.status === 'Ready for Dispatch';
     } else {
@@ -474,6 +545,28 @@ export const OwnerShipments: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Product Loss Discrepancy Alert Banner */}
+                {(shipment.status === 'Discrepancy Detected' ||
+                  (shipment.status as string) === 'Discrepancy' ||
+                  (totalVerified < totalExpected &&
+                    shipment.status !== 'Draft' &&
+                    shipment.status !== 'Ready for Dispatch')) && (
+                  <div className="bg-rose-950/40 border border-rose-600/70 rounded-xl p-3.5 flex items-start gap-3 animate-in fade-in duration-150">
+                    <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="text-xs space-y-1">
+                      <div className="font-bold text-rose-300 flex items-center gap-2 flex-wrap">
+                        <span>⚠️ Discrepancy Alert: Product Loss Detected!</span>
+                        <span className="bg-rose-900/90 text-rose-200 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold">
+                          {Math.max(0, totalExpected - totalVerified)} units missing
+                        </span>
+                      </div>
+                      <p className="text-rose-200/90 leading-relaxed">
+                        Vendor receiving checkpoint verified {totalVerified} of {totalExpected} units. Product loss of {Math.max(0, totalExpected - totalVerified)} units flagged for investigation.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Second Row: Route (Origin → Destination) */}
                 <div className="text-xs text-neutral-400 font-medium flex items-center gap-1.5 flex-wrap">
                   <span>{shipment.origin}</span>
@@ -517,7 +610,7 @@ export const OwnerShipments: React.FC = () => {
                 <div className="border-t border-neutral-900/90 pt-3 flex items-center justify-between relative">
                   <button
                     type="button"
-                    onClick={() => setDetailsShipment(shipment)}
+                    onClick={() => openDetailsWithReconciliation(shipment)}
                     className="px-3.5 py-1.5 rounded-full border border-neutral-700 bg-neutral-900/90 hover:bg-neutral-800 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                   >
                     <span>View details</span>
@@ -583,6 +676,22 @@ export const OwnerShipments: React.FC = () => {
                             <Truck className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
                             <span>Process fulfillment</span>
                           </button>
+
+                          {(shipment.status === 'Discrepancy Detected' ||
+                            (shipment.status as string) === 'Discrepancy' ||
+                            totalVerified < totalExpected) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveMenuId(null);
+                                setResolveShipment(shipment);
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-rose-300 hover:text-white hover:bg-rose-950/70 border border-rose-900/40 rounded-xl transition text-left cursor-pointer group"
+                            >
+                              <Shield className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
+                              <span>Resolve discrepancy</span>
+                            </button>
+                          )}
                         </div>
                       </>
                     )}
@@ -660,6 +769,55 @@ export const OwnerShipments: React.FC = () => {
                   </span>
                 </div>
               </div>
+
+              {/* Live Reconciliation Report Section */}
+              {reconciliationLoading ? (
+                <div className="p-4 bg-neutral-900/50 border border-neutral-800 rounded-xl text-center text-xs text-neutral-400 animate-pulse">
+                  Loading live reconciliation report from backend API...
+                </div>
+              ) : reconciliationReport ? (
+                <div className="p-4 bg-black border border-neutral-800 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-indigo-400" />
+                      Reconciliation Report (Live API)
+                    </span>
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                      reconciliationReport.variance_units < 0
+                        ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                        : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                    }`}>
+                      {reconciliationReport.reconciliation_status.toUpperCase()} • {reconciliationReport.variance_units < 0 ? `${Math.abs(reconciliationReport.variance_units)} Units Missing` : 'Reconciled'}
+                    </span>
+                  </div>
+
+                  {reconciliationReport.variance_units < 0 && (
+                    <div className="p-2.5 bg-rose-950/30 border border-rose-800/60 rounded-lg text-xs text-rose-300 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                      <span>Product Loss Alert: Vendor verified {reconciliationReport.verified_units} of {reconciliationReport.expected_units} expected units.</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    {reconciliationReport.lines.map((line, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-xs p-2 bg-neutral-900/60 rounded-lg border border-neutral-800/80">
+                        <span className="font-mono text-indigo-300 font-bold">{line.product_code}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-neutral-400">Exp: <strong className="text-white">{line.expected_quantity}</strong></span>
+                          <span className="text-neutral-400">Ver: <strong className={line.status === 'shortage' ? 'text-rose-400' : 'text-emerald-400'}>{line.verified_quantity}</strong></span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            line.status === 'shortage'
+                              ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                              : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                          }`}>
+                            {line.status.toUpperCase()} ({line.variance > 0 ? `+${line.variance}` : line.variance})
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {/* Manifest Product Lines Table */}
               <div className="bg-black rounded-xl border border-neutral-800 overflow-hidden">
@@ -1419,6 +1577,93 @@ export const OwnerShipments: React.FC = () => {
           </div>
         </div>
       )}
+      {/* ========================================================================= */}
+      {/* MODAL 5: RESOLVE DISCREPANCY MODAL                                        */}
+      {/* ========================================================================= */}
+      {resolveShipment && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-3xl max-w-lg w-full shadow-2xl text-white overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-neutral-800 flex items-center justify-between bg-black">
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-rose-400" />
+                <h3 className="text-base font-bold text-white">Resolve Discrepancy</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResolveShipment(null)}
+                className="p-1.5 text-neutral-400 hover:text-white rounded-lg transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleResolveDiscrepancySubmit} className="p-5 space-y-4 text-xs">
+              <div className="p-3 bg-rose-950/30 border border-rose-800/60 rounded-xl space-y-1">
+                <div className="font-bold text-rose-300">Shipment: {resolveShipment.trackingNumber}</div>
+                <div className="text-rose-200/80">
+                  Product Loss / Shortage investigation. Select resolution action and record audit notes.
+                </div>
+              </div>
+
+              <div>
+                <label className="text-neutral-400 font-semibold block mb-1">Resolution Status</label>
+                <select
+                  value={resolutionStatus}
+                  onChange={e => setResolutionStatus(e.target.value as DiscrepancyStatus)}
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-xl px-3 py-2 text-white focus:outline-none"
+                >
+                  <option value="Resolved">Resolved</option>
+                  <option value="Under Review">Under Review</option>
+                  <option value="Escalated">Escalated</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-neutral-400 font-semibold block mb-1">Resolution Type</label>
+                <select
+                  value={resolutionType}
+                  onChange={e => setResolutionType(e.target.value)}
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-xl px-3 py-2 text-white focus:outline-none"
+                >
+                  <option value="Inventory Adjusted">Inventory Adjusted</option>
+                  <option value="Vendor Reimbursed">Vendor Reimbursed</option>
+                  <option value="Supplier Credit">Supplier Credit Issued</option>
+                  <option value="Found in Other Container">Found in Other Container</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-neutral-400 font-semibold block mb-1">Resolution Notes</label>
+                <textarea
+                  rows={3}
+                  value={resolutionNotes}
+                  onChange={e => setResolutionNotes(e.target.value)}
+                  placeholder="Explain resolution outcome..."
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-xl p-3 text-white focus:outline-none resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => setResolveShipment(null)}
+                  className="px-4 py-2 rounded-xl border border-neutral-700 text-neutral-300 font-bold hover:bg-neutral-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingResolution}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <span>{isSubmittingResolution ? 'Saving...' : 'Confirm Resolution'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

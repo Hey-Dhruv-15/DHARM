@@ -18,11 +18,55 @@ import type { Shipment } from '../../types';
 
 export const VendorShipments: React.FC = () => {
   const navigate = useNavigate();
-  const { shipments, receiveShipment } = useData();
+  const { shipments, receiveShipment, updateShipment, reconcileShipmentReceiving } = useData();
   const { user, role } = useAuth();
 
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(shipments[0]?.id || null);
+  const [reconcileShipment, setReconcileShipment] = useState<Shipment | null>(null);
+  const [vendorItemQtys, setVendorItemQtys] = useState<{ [sku: string]: number }>({});
+  const [reconcileNotice, setReconcileNotice] = useState<string | null>(null);
+
+  const openReconcileModal = (s: Shipment) => {
+    setReconcileShipment(s);
+    const qtys: { [sku: string]: number } = {};
+    s.items.forEach(i => {
+      qtys[i.sku] = i.verifiedQuantity !== undefined ? i.verifiedQuantity : i.expectedQuantity;
+    });
+    setVendorItemQtys(qtys);
+    setReconcileNotice(null);
+  };
+
+  const handleConfirmVendorReceiving = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reconcileShipment) return;
+
+    // First update the verified quantities on the items
+    const updatedItems = reconcileShipment.items.map(item => ({
+      ...item,
+      verifiedQuantity: vendorItemQtys[item.sku] ?? item.verifiedQuantity ?? item.expectedQuantity,
+      scannedQuantity: vendorItemQtys[item.sku] ?? item.scannedQuantity ?? item.expectedQuantity
+    }));
+
+    updateShipment(reconcileShipment.id, { items: updatedItems }, user?.name || 'Sinu Gunshetty', 'VENDOR');
+
+    // Reconcile and calculate discrepancy
+    const result = await reconcileShipmentReceiving(
+      reconcileShipment.id,
+      user?.name || 'Sinu Gunshetty',
+      'VENDOR',
+      'Midwest Sorting Hub 4 Bay C'
+    );
+
+    if (result.hasDiscrepancy) {
+      alert(`⚠️ Discrepancy Alert: Product loss detected! ${result.missingUnits} units missing from shipment manifest. Discrepancy case created and Owner notified!`);
+    } else {
+      alert('✅ All physical units matched and received cleanly!');
+    }
+
+    setReconcileShipment(null);
+  };
+
 
   const handleReceive = (s: Shipment) => {
     receiveShipment(s.id, user?.name || 'Sinu Gunshetty', role || 'VENDOR');
@@ -113,6 +157,15 @@ export const VendorShipments: React.FC = () => {
                   )}
 
                   <button
+                    onClick={() => openReconcileModal(shipment)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                    title="Verify Received Quantities"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Verify Receiving</span>
+                  </button>
+
+                  <button
                     onClick={() => navigate('/vendor/scanner')}
                     className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition cursor-pointer"
                   >
@@ -183,6 +236,93 @@ export const VendorShipments: React.FC = () => {
           );
         })}
       </div>
+
+      {/* Vendor Receiving & Reconciliation Modal */}
+      {reconcileShipment && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Vendor Receiving Checkpoint
+                </h3>
+                <p className="text-xs text-slate-500 font-mono">
+                  {reconcileShipment.trackingNumber} • {reconcileShipment.origin}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReconcileShipment(null)}
+                className="text-slate-400 hover:text-slate-700 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmVendorReceiving} className="space-y-4">
+              <p className="text-xs text-slate-600">
+                Confirm physically verified units for each product line. Any shortage will automatically flag a <strong>Product Loss Discrepancy</strong> for the Owner.
+              </p>
+
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {reconcileShipment.items.map(item => {
+                  const currentQty = vendorItemQtys[item.sku] ?? item.verifiedQuantity ?? item.expectedQuantity;
+                  const isShortage = currentQty < item.expectedQuantity;
+
+                  return (
+                    <div
+                      key={item.sku}
+                      className={`p-3 rounded-xl border flex items-center justify-between gap-3 text-xs ${
+                        isShortage ? 'bg-rose-50/70 border-rose-200' : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div>
+                        <div className="font-bold text-slate-900">{item.productName}</div>
+                        <div className="font-mono text-[11px] text-slate-500">{item.sku}</div>
+                        <div className="text-[10px] text-slate-400">Expected: {item.expectedQuantity} units</div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <label className="text-[11px] font-semibold text-slate-600">Received:</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={item.expectedQuantity * 2}
+                          value={currentQty}
+                          onChange={e =>
+                            setVendorItemQtys(prev => ({
+                              ...prev,
+                              [item.sku]: Number(e.target.value) || 0
+                            }))
+                          }
+                          className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-center font-bold font-mono focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setReconcileShipment(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition"
+                >
+                  Confirm & Reconcile Receiving
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

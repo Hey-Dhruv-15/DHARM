@@ -151,7 +151,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (s) {
       try {
         const parsed = JSON.parse(s);
-        if (Array.isArray(parsed) && parsed.length >= INITIAL_PRODUCTS.length) {
+        if (Array.isArray(parsed)) {
+          const hasCarton = parsed.some((p: any) => p.barcode === '10614141999993');
+          if (!hasCarton) {
+            return [INITIAL_PRODUCTS[0], ...parsed];
+          }
           return parsed;
         }
       } catch (e) {

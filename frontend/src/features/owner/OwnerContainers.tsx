@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { containerApi } from '../../services/containerApi';
+import { getApiBaseUrl } from '../../services/apiConfig';
 import { OpenCvBarcodeScanner } from '../../components/scanner/OpenCvBarcodeScanner';
 import {
   Archive,
@@ -68,6 +69,8 @@ export const OwnerContainers: React.FC = () => {
   const [barcodeInput, setBarcodeInput] = useState<string>('');
   const [isScanningApi, setIsScanningApi] = useState<boolean>(false);
   const [scanApiSuccess, setScanApiSuccess] = useState<string | null>(null);
+  const [selectedCatalogBarcode, setSelectedCatalogBarcode] = useState<string>('');
+  const [selectedPackQuantity, setSelectedPackQuantity] = useState<number>(1);
 
   // Dropdown menu state for cards
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -165,7 +168,7 @@ export const OwnerContainers: React.FC = () => {
 
     // Fetch latest manifest directly from backend
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/containers/${encodeURIComponent(c.containerNumber || c.id)}`);
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/containers/${encodeURIComponent(c.containerNumber || c.id)}`);
       if (res.ok) {
         const fullContainer = await res.json();
         const rawItems = fullContainer.items || fullContainer.products || [];
@@ -209,7 +212,7 @@ export const OwnerContainers: React.FC = () => {
 
     try {
       const response = await fetch(
-        `http://localhost:8000/api/v1/containers/${encodeURIComponent(containerIdentifier)}/products/scan`,
+        `${getApiBaseUrl()}/api/v1/containers/${encodeURIComponent(containerIdentifier)}/products/scan`,
         {
           method: 'POST',
           headers: {
@@ -228,7 +231,7 @@ export const OwnerContainers: React.FC = () => {
       // Reload container manifest from backend (GET /api/v1/containers/{id})
       try {
         const getRes = await fetch(
-          `http://localhost:8000/api/v1/containers/${encodeURIComponent(containerIdentifier)}`
+          `${getApiBaseUrl()}/api/v1/containers/${encodeURIComponent(containerIdentifier)}`
         );
         if (getRes.ok) {
           const fullContainer = await getRes.json();
@@ -301,7 +304,7 @@ export const OwnerContainers: React.FC = () => {
 
     try {
       await fetch(
-        `http://localhost:8000/api/v1/containers/${encodeURIComponent(scanModalContainer.containerNumber)}/products/${encodeURIComponent(identifier)}`,
+        `${getApiBaseUrl()}/api/v1/containers/${encodeURIComponent(scanModalContainer.containerNumber)}/products/${encodeURIComponent(identifier)}`,
         { method: 'DELETE' }
       );
     } catch (e) {
@@ -402,7 +405,7 @@ export const OwnerContainers: React.FC = () => {
     setIsCreatingContainer(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/containers', {
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/containers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -1226,6 +1229,120 @@ export const OwnerContainers: React.FC = () => {
                   </div>
                 )}
 
+                {/* 1. SELECT PRODUCT IN UI (Fast Direct Catalog Picker) */}
+                <div className="bg-gradient-to-r from-indigo-950/60 via-slate-900 to-indigo-950/40 p-4 sm:p-5 rounded-2xl border border-indigo-800/60 shadow-lg space-y-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400">
+                        <Package className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                          <span>Select Product in UI to Pack</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-700 text-emerald-300 font-bold">
+                            Direct Catalog Picker
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-slate-400">
+                          Choose any product from your master catalog to pack directly into this container.
+                        </p>
+                      </div>
+                    </div>
+
+                    {scanApiSuccess && (
+                      <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5 animate-in fade-in">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>{scanApiSuccess}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Dropdown + Quantity + Pack Button */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                    <div className="relative flex-1">
+                      <select
+                        value={selectedCatalogBarcode || (products[0]?.barcode || '')}
+                        onChange={(e) => setSelectedCatalogBarcode(e.target.value)}
+                        className="w-full bg-slate-950 border border-indigo-700/60 focus:border-indigo-400 rounded-xl px-3.5 py-2.5 text-xs text-white font-medium focus:outline-none transition cursor-pointer"
+                      >
+                        {products.map((p) => (
+                          <option key={p.id} value={p.barcode} className="bg-slate-900 text-white">
+                            {p.name} — SKU: {p.sku} | Barcode: {p.barcode} ({getProductUnitWeight(p)} kg)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Quantity Picker */}
+                    <div className="flex items-center bg-slate-950 border border-slate-700 rounded-xl px-2 py-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPackQuantity(Math.max(1, selectedPackQuantity - 1))}
+                        className="px-2 py-1 text-slate-400 hover:text-white font-bold text-sm cursor-pointer"
+                      >
+                        -
+                      </button>
+                      <span className="px-2 font-mono text-xs font-bold text-white min-w-[28px] text-center">
+                        {selectedPackQuantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPackQuantity(selectedPackQuantity + 1)}
+                        className="px-2 py-1 text-slate-400 hover:text-white font-bold text-sm cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* Pack Button */}
+                    <button
+                      type="button"
+                      disabled={isScanningApi || products.length === 0}
+                      onClick={async () => {
+                        const bc = selectedCatalogBarcode || products[0]?.barcode;
+                        if (!bc) return;
+                        for (let q = 0; q < selectedPackQuantity; q++) {
+                          await addBarcode(scanModalContainer.containerNumber, bc);
+                        }
+                      }}
+                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-indigo-600/30 whitespace-nowrap"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      <span>{isScanningApi ? 'Packing...' : `Pack ${selectedPackQuantity > 1 ? `${selectedPackQuantity} Units` : 'Product'}`}</span>
+                    </button>
+                  </div>
+
+                  {/* 1-Click Quick Pack Catalog Chips */}
+                  <div className="pt-1">
+                    <div className="text-[11px] font-semibold text-slate-400 mb-1.5 flex items-center justify-between">
+                      <span>Click Any Product to Quick-Pack into Container:</span>
+                      <span className="text-[10px] text-slate-500">{products.length} catalog items</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-36 overflow-y-auto pr-1">
+                      {products.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => addBarcode(scanModalContainer.containerNumber, p.barcode)}
+                          className="p-2 rounded-xl bg-slate-900/90 hover:bg-indigo-950/70 border border-slate-800 hover:border-indigo-600/60 text-left transition flex items-center justify-between gap-2 group cursor-pointer"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-white group-hover:text-indigo-300 truncate">
+                              {p.name}
+                            </div>
+                            <div className="text-[10px] font-mono text-slate-400 truncate">
+                              {p.barcode} • {getProductUnitWeight(p)}kg
+                            </div>
+                          </div>
+                          <span className="px-2 py-1 rounded-lg bg-indigo-600/20 group-hover:bg-indigo-600 text-indigo-300 group-hover:text-white text-[10px] font-bold shrink-0 transition">
+                            + Add
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {/* 2. OpenCV Camera Barcode Scanner Component */}
                 <div className="bg-slate-950/70 p-4 sm:p-5 rounded-2xl border border-slate-800">
                   <OpenCvBarcodeScanner
@@ -1266,7 +1383,7 @@ export const OwnerContainers: React.FC = () => {
                         type="text"
                         value={barcodeInput}
                         onChange={(e) => setBarcodeInput(e.target.value)}
-                        placeholder="Scan or enter product barcode e.g. 8901063139374..."
+                        placeholder="Scan or enter product barcode e.g. BC-MED-CRYO-0001 or 8901063139374..."
                         className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-hidden transition shadow-inner"
                       />
                     </div>
@@ -1299,6 +1416,38 @@ export const OwnerContainers: React.FC = () => {
                       title="Scan Switch (8901063139375)"
                     >
                       8901063139375 (Switch)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addBarcode(scanModalContainer.containerNumber, 'BC-MED-CRYO-0001')}
+                      className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500 text-indigo-300 font-mono transition cursor-pointer"
+                      title="Scan Cryo Array (BC-MED-CRYO-0001)"
+                    >
+                      BC-MED-CRYO-0001 (Cryo Array)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addBarcode(scanModalContainer.containerNumber, 'BC-BIO-DIAG-0002')}
+                      className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500 text-indigo-300 font-mono transition cursor-pointer"
+                      title="Scan Bio Reagent (BC-BIO-DIAG-0002)"
+                    >
+                      BC-BIO-DIAG-0002 (Bio Reagent)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addBarcode(scanModalContainer.containerNumber, 'BC-PHRM-COLD-0003')}
+                      className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500 text-indigo-300 font-mono transition cursor-pointer"
+                      title="Scan Insulin Vial (BC-PHRM-COLD-0003)"
+                    >
+                      BC-PHRM-COLD-0003 (Insulin Vial)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addBarcode(scanModalContainer.containerNumber, 'BC-APL-001')}
+                      className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-indigo-500 text-indigo-300 font-mono transition cursor-pointer"
+                      title="Scan Apollo Sensor (BC-APL-001)"
+                    >
+                      BC-APL-001 (Apollo Sensor)
                     </button>
                   </div>
                 </div>

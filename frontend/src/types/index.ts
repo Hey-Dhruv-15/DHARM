@@ -58,6 +58,8 @@ export interface Product {
   gstRate?: number;
   grossPrice?: number;
   currency?: string;
+  unitWeight?: number;
+  unit_weight?: number;
   status?: 'Active' | 'Inactive' | 'Archived';
   description?: string;
   deliverables?: string;

@@ -151,7 +151,7 @@ Once the server is running, open your browser to:
 | Role | Email | Password |
 |---|---|---|
 | **Product Owner** | `hey.dhruvs20@gmail.com` | `Dharam@123` |
-| **Vendor Hub** | `Sinugunshetty@gmail.com` | `Dharam@123` |
+| **Vendor Hub** | `sinugunshetty@gmail.com` | `Dharam@123` |
 | **Customer** | `anusha.s2028@gmail.com` | `Dharam@123` |
 
 ---

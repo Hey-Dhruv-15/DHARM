@@ -200,7 +200,26 @@ def seed_database():
                 "status": "Active",
                 "description": "High conductivity copper wire roll (0.5 kg)."
             },
-            {
+                    {
+            "id": "1007",
+            "sku": "ITF-PKG-993",
+            "name": "Carton Packaging Asset 993 (ITF-14)",
+            "category": "Packaging & Freight Containers",
+            "barcode": "10614141999993",
+            "is_serialized": False,
+            "unit": "Carton",
+            "billing_unit": "One-time",
+            "stock_quantity": 250,
+            "reorder_level": 25,
+            "unit_price": 850.0,
+            "gst_rate": 18.0,
+            "gross_price": 1003.0,
+            "currency": "INR",
+            "unit_weight": 1.5,
+            "status": "Active",
+            "description": "Standard heavy-duty corrugated shipping carton with ITF-14 logistics barcode."
+        },
+{
                 "id": "1006",
                 "sku": "SKU-0016",
                 "name": "Switch",

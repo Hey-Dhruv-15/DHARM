@@ -223,7 +223,7 @@ def init_db():
     except Exception as e:
         logger.warning(f"Error creating database tables with primary engine: {e}. Retrying with SQLite fallback.")
         engine = get_engine("sqlite:///./dharm.db")
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        SessionLocal.configure(bind=engine)
         Base.metadata.create_all(bind=engine)
         _sync_product_columns()
         _sync_container_columns()

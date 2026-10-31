@@ -40,6 +40,26 @@ export const DEMO_CREDENTIALS = {
 
 export const INITIAL_PRODUCTS: Product[] = [
   {
+    id: 'prod-carton-993',
+    sku: 'ITF-PKG-993',
+    name: 'Carton Packaging Asset 993 (ITF-14)',
+    category: 'Packaging & Freight Containers',
+    barcode: '10614141999993',
+    isSerialized: false,
+    unit: 'Carton',
+    billingUnit: 'One-time',
+    stockQuantity: 250,
+    reorderLevel: 25,
+    unitPrice: 850,
+    gstRate: 18,
+    grossPrice: 1003,
+    currency: 'INR',
+    unitWeight: 1.5,
+    status: 'Active',
+    description: 'Standard heavy-duty corrugated shipping carton with ITF-14 logistics barcode.',
+    createdAt: '2026-10-31T10:00:00Z'
+  },
+  {
     id: 'prod-sas-01',
     sku: 'GEN-SAS-001',
     name: 'SASAS (Copy)',
